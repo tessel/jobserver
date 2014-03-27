@@ -38,6 +38,12 @@ counter = 0
 
 		job.submitted(this)
 
+	jsonableState: ->
+		jobs = for id, job of @activeJobs
+			job.jsonableState()
+
+		{jobs}
+
 class FutureResult
 	constructor: (@job, @key) ->
 	get: ->
@@ -77,6 +83,9 @@ class TeeStream extends Transform
 		@result = {}
 		for key in resultNames
 			@result[key] = new FutureResult(this, key)
+
+	jsonableState: ->
+		{@id, @name, @description, @state, settled: @settled()}
 
 	submitted: (@server) ->
 		@dependencies = @explicitDependencies.slice(0)
