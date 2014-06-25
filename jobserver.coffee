@@ -14,12 +14,12 @@ STATES = [
 	'abort'     # Ran and did not produce its output due to e.g. a network problem. Running again may succeed.
 ]
 
-
-counter = 0
+# A `Server` maintains the global job list and aggregates events for the UI
 @Server = class Server extends EventEmitter
 	constructor: (@jobStore, @blobStore) ->
 		@activeJobs = {}
 
+	counter = 0
 	makeJobId: -> (counter++)
 
 	submit: (job, doneCb) ->
@@ -44,7 +44,8 @@ counter = 0
 
 		{jobs}
 
-class FutureResult
+# A `FutureResult` is a reference to a result of a `Job` which may not yet have completed
+@FutureResult = class FutureResult
 	constructor: (@job, @key) ->
 	get: ->
 		if @job.status == 'success'
@@ -52,7 +53,9 @@ class FutureResult
 		else
 			throw new Error("Accessing result of job with status #{@job.status}")
 
-class BlobStore
+# `BlobStore` is the abstract base class for result file data storage.
+# Subclasses persist Buffers and retrieve them by hash.
+@BlobStore = class BlobStore
 	newBlob: (buffer, meta) ->
 		throw new Error("Abstract method")
 	getBlob: (id, cb) ->
@@ -60,13 +63,14 @@ class BlobStore
 	hash: (buffer) ->
 		crypto.createHmac('sha256', BLOB_HMAC_KEY).update(buffer).digest().toString('base64')
 
-
+# An item in a BlobStore
 class Blob
 	constructor: (@store, @id, @meta, @cached) ->
 
-class JobStore
+# Abstact base class for database of job history
+@JobStore = class JobStore
 
-
+# A Stream transformer that captures a copy of the streamed data and passes it through
 class TeeStream extends Transform
 	constructor: ->
 		super()
@@ -77,6 +81,7 @@ class TeeStream extends Transform
 		this.push(chunk)
 		callback()
 
+# Object containing the state and logic for a job. Subclasses can override the behavior
 @Job = class Job extends EventEmitter
 	constructor: (@executor=false, @pure=false, @inputs={}, @explicitDependencies=[], resultNames=[]) ->
 		@state = null
@@ -196,7 +201,7 @@ class TeeStream extends Transform
 				@saveState('success')
 			else
 				@saveState('fail')
-	
+
 	name: ''
 	description: ''
 
@@ -205,6 +210,7 @@ class TeeStream extends Transform
 		@logStream.write("Default exec!")
 		setImmediate( -> cb(false) )
 
+# An in-memory BlobStore
 @BlobStoreMem = class BlobStoreMem extends BlobStore
 	constructor: ->
 		@blobs = {}

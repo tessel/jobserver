@@ -24,7 +24,7 @@ orderingSpy = (events) ->
 	counter = 0
 
 	events.forEach (name) ->
-		r[name] = -> 
+		r[name] = ->
 			if events[counter] == name
 				counter++
 			else
