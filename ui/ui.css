@@ -93,6 +93,7 @@ body>header>a {
 	background: #dcdcdc;
 	position: relative;
 	border-bottom: 1px solid #aaa;
+	transition: background-color 0.5s;
 }
 
 .job[data-status=waiting]>header {

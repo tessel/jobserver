@@ -25,9 +25,15 @@ class JobTile extends Backbone.View
 		@listenTo @model, 'destroy', this.remove
 
 	render: ->
-		@$el.empty().addClass('job').attr('data-status', @model.get 'state')
-		@$header = $("<header>").appendTo(@$el)
-		@$title = $("<h1>").text(@model.get 'description').appendTo(@$header)
+		@$el.attr('data-status', @model.get 'state')
+		unless @$header
+			@$el.empty().addClass('job')
+			@$header = $("<header>").appendTo(@$el)
+			@$title = $("<h1>").text(@model.get 'description').appendTo(@$header)
+
+		if @model.get('settled')
+			setTimeout (=> @$el.slideUp(500, => @remove())), 2000
+
 		@$el
 
 class JobSidebar extends Backbone.View
