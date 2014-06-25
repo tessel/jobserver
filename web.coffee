@@ -29,14 +29,18 @@ if module is require.main
 	jobstore = new jobserver.JobStoreMem()
 	blobstore = new jobserver.BlobStoreMem()
 	server = new jobserver.Server(jobstore, blobstore)
+	e1 = new jobserver.SeriesExecutor(new jobserver.Executor())
+	e2 = new jobserver.SeriesExecutor(new jobserver.Executor())
 	exports(server).listen(8080)
 
-	setInterval (-> 
-		j = new jobserver.Job()
-		j.name = "test"
-		j.description = "Test Job"
-		j.doExec = (cb) ->
-			setTimeout (-> cb(true)), 4000
-		server.submit(j)
-	), 5000
+	n = 0
 
+	setInterval (->
+		j = new jobserver.Job()
+		j.executor = if n & 1 then e1 else e2
+		j.name = "test"
+		j.description = "Test Job #{n += 1}"
+		j.doExec = (cb) ->
+			setTimeout (-> cb(true)), 3000 * Math.random() + 1000
+		server.submit(j)
+	), 1000

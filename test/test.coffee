@@ -111,4 +111,31 @@ describe 'Job', ->
 	it 'Hashes consistently'
 	it 'Avoids recomputing calculated jobs'
 
+describe 'SeriesExecutor', ->
+		e = null
+		beforeEach ->
+			e = new jobserver.SeriesExecutor(new jobserver.Executor())
 
+		it 'Runs jobs in order', ->
+			spy = new orderingSpy(['j1_start', 'j1_done', 'j2', 'j3_start', 'j3_done'])
+			j1 = new TestJob (cb) ->
+				spy.j1_start()
+				setTimeout (->
+					spy.j1_done()
+					cb(true)
+				), 100
+
+			j2 = new TestJob (cb) ->
+				spy.j2()
+				cb(true)
+
+			j3 = new TestJob (cb) ->
+				spi.j3_start()
+				setTimeout (->
+					spy.j3_done()
+					cb(false)
+				), 10
+
+			e.enqueue(j1)
+			e.enqueue(j2)
+			e.enqueue(j3)

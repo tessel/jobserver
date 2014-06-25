@@ -230,3 +230,24 @@ class TeeStream extends Transform
 @JobStoreMem = class JobStoreMem extends JobStore
 	constructor: ->
 
+# An Executor manages the execution of a set of jobs. May also wrap access to an execution resource
+@Executor = class Executor
+	enqueue: (job) ->
+		setImmediate(-> job.exec())
+
+# An executor combinator that runs jobs one at a time in series on a specified executor
+@SeriesExecutor = class SeriesExecutor extends Executor
+	constructor: (@executor) ->
+		super()
+		@currentJob = null
+		@queue = []
+
+	enqueue: (job) =>
+		@queue.push(job)
+		@shift() unless @currentJob
+
+	shift: =>
+			@currentJob = @queue.shift()
+			if @currentJob
+				@currentJob.on 'settled', @shift
+				@executor.enqueue(@currentJob)
