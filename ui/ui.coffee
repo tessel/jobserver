@@ -14,6 +14,7 @@ class ListView extends Backbone.View
 
 	addAll: ->
 		@$el.empty()
+		app.jobs.each (job) => @addOne(job)
 
 	addOne: (job) ->
 		view = new JobTile { model: job }
