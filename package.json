@@ -14,7 +14,8 @@
     "mocha": "~1.18.0"
   },
   "dependencies": {
-    "ws": "~0.4.31",
-    "send": "~0.2.0"
+    "send": "~0.2.0",
+    "server-event": "~1.0.1",
+    "express": "~4.4.5"
   }
 }

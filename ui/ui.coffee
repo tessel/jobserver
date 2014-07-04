@@ -39,33 +39,29 @@ class JobTile extends Backbone.View
 class JobSidebar extends Backbone.View
 
 connect = ->
-	protocol = if window.location.protocol is 'https:' then 'wss:' else 'ws:'
-	socket = new WebSocket("#{protocol}//#{window.location.host}#{window.location.pathname}socket")
-	app.socket = socket
+	app.eventsource = new EventSource('/jobs')
 
-	socket.onopen = ->
+	app.eventsource.addEventListener 'open', ->
 		console.log('open')
 
-	socket.onclose = ->
+	app.eventsource.addEventListener 'close', ->
 		console.log('close')
 
-	socket.onerror = ->
-		console.log('error')
+	app.eventsource.addEventListener 'error', (e) ->
+		console.log('error', e)
 
-	socket.onmessage = (msg) ->
-		m = JSON.parse(msg.data)
+	listen = (type, cb) ->
+		app.eventsource.addEventListener type, (e) ->
+			cb(JSON.parse(e.data))
 
-		console.log(msg.data)
+	listen 'hello', (m) ->
+		app.jobs.reset(m.jobs)
 
-		switch m.event
-			when 'hello'
-				app.jobs.reset(m.jobs)
-			when 'job'
-				app.jobs.add(m.job, {merge: true})
+	listen 'job', (m) ->
+		app.jobs.add(m, {merge: true})
 
 $().ready ->
 	app.jobs = new JobCollection()
 	app.list = new ListView()
 
 	connect()
-
