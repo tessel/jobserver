@@ -83,7 +83,7 @@ class TeeStream extends Transform
 
 # Object containing the state and logic for a job. Subclasses can override the behavior
 @Job = class Job extends EventEmitter
-	constructor: (@executor=false, @pure=false, @inputs={}, @explicitDependencies=[], resultNames=[]) ->
+	constructor: (@executor=undefined, @pure=false, @inputs={}, @explicitDependencies=[], resultNames=[]) ->
 		@state = null
 		@result = {}
 		for key in resultNames
@@ -93,6 +93,8 @@ class TeeStream extends Transform
 		{@id, @name, @description, @state, settled: @settled()}
 
 	submitted: (@server) ->
+		@executor ?= @server.defaultExecutor
+		
 		@dependencies = @explicitDependencies.slice(0)
 		for i in @inputs
 			if i instanceof FutureResult
@@ -167,11 +169,8 @@ class TeeStream extends Transform
 		@_hash
 
 	enqueue: ->
-		if @executor
-			@saveState 'pending'
-			@executor.enqueue(this)
-		else
-			@exec()
+		@saveState 'pending'
+		@executor.enqueue(this)
 
 	settled: ->
 		@state in ['success', 'fail', 'abort']
@@ -185,11 +184,11 @@ class TeeStream extends Transform
 		if @settled()
 			@emit 'settled'
 
-	exec: ->
+	exec: (@ctx) ->
 		@startTime = new Date()
 		@saveState 'running'
-		@logStream = new TeeStream()
-		@doExec (result) =>
+		@run @ctx, (result) =>
+			@ctx.end()
 			@endTime = new Date()
 			@fromCache = false
 
@@ -206,8 +205,8 @@ class TeeStream extends Transform
 	description: ''
 
 	# Override this
-	doExec: (cb) ->
-		@logStream.write("Default exec!")
+	run: (ctx, cb) ->
+		ctx.write("Default exec!")
 		setImmediate( -> cb(false) )
 
 # An in-memory BlobStore
@@ -233,7 +232,11 @@ class TeeStream extends Transform
 # An Executor manages the execution of a set of jobs. May also wrap access to an execution resource
 @Executor = class Executor
 	enqueue: (job) ->
-		setImmediate(-> job.exec())
+		ctx = new this.Context()
+		setImmediate(-> job.exec(ctx))
+	
+	# An Executor provides a Job a Context to access resources
+	Context: class Context extends TeeStream
 
 # An executor combinator that runs jobs one at a time in series on a specified executor
 @SeriesExecutor = class SeriesExecutor extends Executor

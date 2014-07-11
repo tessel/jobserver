@@ -50,7 +50,7 @@ describe 'orderingSpy', ->
 			o.c()
 
 class TestJob extends jobserver.Job
-	constructor: (@doExec) ->
+	constructor: (@run) ->
 		super()
 
 describe 'Job', ->
@@ -60,14 +60,15 @@ describe 'Job', ->
 		jobstore = new jobserver.JobStoreMem()
 		blobstore = new jobserver.BlobStoreMem()
 		server = new jobserver.Server(jobstore, blobstore)
+		server.defaultExecutor = new jobserver.Executor()
 
 	it 'Runs and emits states and collects a log', (cb) ->
-		ordered = orderingSpy(['waiting', 'running', 'exec', 'success', 'settled'])
-		job = new TestJob (cb) ->
+		ordered = orderingSpy(['waiting', 'pending', 'running', 'exec', 'success', 'settled'])
+		job = new TestJob (ctx, cb) ->
 			ordered.exec()
-			@logStream.write("test1\n")
+			ctx.write("test1\n")
 			setImmediate =>
-				@logStream.write("test2\n")
+				ctx.write("test2\n")
 				cb(true)
 
 		job.on 'state', (s) ->
@@ -75,7 +76,7 @@ describe 'Job', ->
 
 		job.on 'settled', ->
 			ordered.settled()
-			assert.equal(@logStream.log, 'test1\ntest2\n')
+			assert.equal(job.ctx.log, 'test1\ntest2\n')
 			cb()
 
 		server.submit(job)
@@ -83,11 +84,11 @@ describe 'Job', ->
 	it 'Runs dependencies in order', (done) ->
 		ordered = orderingSpy(['prestart', 'depstart', 'depstart', 'depdone', 'depdone' , 'parentstart'])
 
-		job0 = new TestJob (cb) ->
+		job0 = new TestJob (ctx, cb) ->
 			ordered.prestart()
 			setImmediate(-> cb(true))
 
-		depfn = (cb) ->
+		depfn = (ctx, cb) ->
 			ordered.depstart()
 			setImmediate ->
 				ordered.depdone()
@@ -95,7 +96,7 @@ describe 'Job', ->
 
 		job1 = new TestJob depfn
 		job2 = new TestJob depfn
-		job3 = new TestJob (cb) ->
+		job3 = new TestJob (ctx, cb) ->
 			ordered.parentstart()
 			setImmediate(-> cb(true))
 
@@ -118,18 +119,18 @@ describe 'SeriesExecutor', ->
 
 		it 'Runs jobs in order', ->
 			spy = new orderingSpy(['j1_start', 'j1_done', 'j2', 'j3_start', 'j3_done'])
-			j1 = new TestJob (cb) ->
+			j1 = new TestJob (ctx, cb) ->
 				spy.j1_start()
 				setTimeout (->
 					spy.j1_done()
 					cb(true)
 				), 100
 
-			j2 = new TestJob (cb) ->
+			j2 = new TestJob (ctx, cb) ->
 				spy.j2()
 				cb(true)
 
-			j3 = new TestJob (cb) ->
+			j3 = new TestJob (ctx, cb) ->
 				spi.j3_start()
 				setTimeout (->
 					spy.j3_done()
