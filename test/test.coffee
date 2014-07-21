@@ -69,14 +69,14 @@ describe 'Job', ->
 			ctx.write("test1\n")
 			setImmediate =>
 				ctx.write("test2\n")
-				cb(true)
+				ctx.done()
 
 		job.on 'state', (s) ->
 			ordered[s]()
 
 		job.on 'settled', ->
 			ordered.settled()
-			assert.equal(job.ctx.log, 'test1\ntest2\n')
+			assert.equal(job.log, 'test1\ntest2\n')
 			cb()
 
 		server.submit(job)
@@ -84,21 +84,21 @@ describe 'Job', ->
 	it 'Runs dependencies in order', (done) ->
 		ordered = orderingSpy(['prestart', 'depstart', 'depstart', 'depdone', 'depdone' , 'parentstart'])
 
-		job0 = new TestJob (ctx, cb) ->
+		job0 = new TestJob (ctx) ->
 			ordered.prestart()
-			setImmediate(-> cb(true))
+			setImmediate(-> ctx.done())
 
-		depfn = (ctx, cb) ->
+		depfn = (ctx) ->
 			ordered.depstart()
 			setImmediate ->
 				ordered.depdone()
-				cb(true)
+				ctx.done()
 
 		job1 = new TestJob depfn
 		job2 = new TestJob depfn
-		job3 = new TestJob (ctx, cb) ->
+		job3 = new TestJob (ctx) ->
 			ordered.parentstart()
-			setImmediate(-> cb(true))
+			setImmediate(-> ctx.done())
 
 		job1.explicitDependencies.push(job0)
 		job2.explicitDependencies.push(job0)
@@ -119,22 +119,22 @@ describe 'SeriesExecutor', ->
 
 		it 'Runs jobs in order', ->
 			spy = new orderingSpy(['j1_start', 'j1_done', 'j2', 'j3_start', 'j3_done'])
-			j1 = new TestJob (ctx, cb) ->
+			j1 = new TestJob (ctx) ->
 				spy.j1_start()
 				setTimeout (->
 					spy.j1_done()
-					cb(true)
+					ctx.done(null)
 				), 100
 
-			j2 = new TestJob (ctx, cb) ->
+			j2 = new TestJob (ctx) ->
 				spy.j2()
-				cb(true)
+				ctx.done(null)
 
-			j3 = new TestJob (ctx, cb) ->
+			j3 = new TestJob (ctx) ->
 				spi.j3_start()
 				setTimeout (->
 					spy.j3_done()
-					cb(false)
+					ctx.done(new Error("test failure"))
 				), 10
 
 			e.enqueue(j1)

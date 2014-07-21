@@ -184,22 +184,22 @@ class TeeStream extends Transform
 		if @settled()
 			@emit 'settled'
 
-	exec: (@ctx) ->
+	beforeRun: ->
 		@startTime = new Date()
 		@saveState 'running'
-		@run @ctx, (result) =>
-			@ctx.end()
-			@endTime = new Date()
-			@fromCache = false
+		
+	afterRun: (result) ->
+		@endTime = new Date()
+		@fromCache = false
 
-			if @pure
-				@emit 'computed'
+		if @pure
+			@emit 'computed'
 
-			if result
-				@result = result
-				@saveState('success')
-			else
-				@saveState('fail')
+		if result
+			@result = result
+			@saveState('success')
+		else
+			@saveState('fail')
 
 	name: ''
 	description: ''
@@ -232,11 +232,37 @@ class TeeStream extends Transform
 # An Executor manages the execution of a set of jobs. May also wrap access to an execution resource
 @Executor = class Executor
 	enqueue: (job) ->
-		ctx = new this.Context()
-		setImmediate(-> job.exec(ctx))
+		ctx = new this.Context(job)
+		ctx.before (err) ->
+			throw err if err
+			job.beforeRun()
+			job.run(ctx)
 	
 	# An Executor provides a Job a Context to access resources
 	Context: class Context extends TeeStream
+		constructor: (@job)->
+			super()
+			@queue = []
+			
+		before: (cb) ->
+			setImmediate(cb)
+		
+		after: (cb) ->
+			setImmediate(cb)
+			
+		done: (result) ->
+			unless @queue.length
+				@_done(result)
+			
+		_done: (err) ->
+			if err
+				@write("Failed with error: #{err.stack}")
+			
+			@after (err) =>
+				throw err if err
+				@end()
+				@job.log = @log
+				@job.afterRun(!err)
 
 # An executor combinator that runs jobs one at a time in series on a specified executor
 @SeriesExecutor = class SeriesExecutor extends Executor
