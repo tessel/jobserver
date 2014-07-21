@@ -61,7 +61,7 @@ if module is require.main
     j.executor = if n & 1 then e1 else e2
     j.name = "test"
     j.description = "Test Job #{n += 1}"
-    j.doExec = (cb) ->
-      setTimeout (-> cb(true)), 3000 * Math.random() + 1000
+    j.run = (ctx) ->
+      setTimeout (-> ctx.done()), 3000 * Math.random() + 1000
     server.submit(j)
   ), 1000
