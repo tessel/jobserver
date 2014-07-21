@@ -2,6 +2,11 @@
 {Transform} = require('stream')
 crypto = require('crypto')
 
+util = require('util')
+temp = require('temp')
+rimraf = require('rimraf')
+child_process = require('child_process')
+
 BLOB_HMAC_KEY = 'adb97d77011182f0b6884f7a6d32280a'
 JOB_HMAC_KEY  = 'fb49246c50d78d460a5d666e943230fa'
 
@@ -257,12 +262,30 @@ class TeeStream extends Transform
 		_done: (err) ->
 			if err
 				@write("Failed with error: #{err.stack}")
-			
-			@after (err) =>
-				throw err if err
+				
+			@after (e) =>
+				throw e if e
 				@end()
 				@job.log = @log
 				@job.afterRun(!err)
+			
+		then: (fn) ->
+			next = (err) =>
+				@queue.shift()
+				if err
+					return @_done(err)
+				
+				if @queue.length
+					f = @queue[0]
+					setImmediate -> f(next)
+				else
+					@_done()
+				
+				return null
+				
+			if @queue.push(fn) == 1
+				setImmediate -> fn(next)
+				
 
 # An executor combinator that runs jobs one at a time in series on a specified executor
 @SeriesExecutor = class SeriesExecutor extends Executor
@@ -280,3 +303,29 @@ class TeeStream extends Transform
 			if @currentJob
 				@currentJob.on 'settled', @shift
 				@executor.enqueue(@currentJob)
+
+@LocalExecutor = class LocalExecutor extends Executor
+	Context: class Context extends Executor::Context
+		before: (cb) ->
+			temp.mkdir "jobserver-#{@job.name}", (err, @dir) =>
+				@env = {}
+				@cwd = @dir
+				@write("Working directory: #{@dir}\n")
+				cb(err)
+
+		after: (cb) -> 
+			rimraf @dir, cb
+			
+		run: (command, args) ->
+			@then (cb) =>
+				unless util.isArray(args)
+					args = ['-c', command]
+					command = 'sh'
+					
+				@write("$ #{command + if args then args.join(' ') else ''}\n")
+				p = child_process.spawn command, args, {@cwd, @env}
+				p.stdout.pipe(this, {end: false})
+				p.stderr.pipe(this, {end: false})
+				p.on 'close', (code) =>
+					cb(if code != 0 then "Exited with #{code}")
+

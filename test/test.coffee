@@ -117,7 +117,7 @@ describe 'SeriesExecutor', ->
 		beforeEach ->
 			e = new jobserver.SeriesExecutor(new jobserver.Executor())
 
-		it 'Runs jobs in order', ->
+		it 'Runs jobs in order', (cb) ->
 			spy = new orderingSpy(['j1_start', 'j1_done', 'j2', 'j3_start', 'j3_done'])
 			j1 = new TestJob (ctx) ->
 				spy.j1_start()
@@ -131,7 +131,7 @@ describe 'SeriesExecutor', ->
 				ctx.done(null)
 
 			j3 = new TestJob (ctx) ->
-				spi.j3_start()
+				spy.j3_start()
 				setTimeout (->
 					spy.j3_done()
 					ctx.done(new Error("test failure"))
@@ -140,3 +140,42 @@ describe 'SeriesExecutor', ->
 			e.enqueue(j1)
 			e.enqueue(j2)
 			e.enqueue(j3)
+			
+			j3.on 'settled', -> cb()
+			
+describe 'LocalExecutor', ->
+		e = null
+		beforeEach ->
+			e = new jobserver.LocalExecutor()
+			
+		it 'Runs subtasks with a queue', (cb) ->
+			j = new TestJob (ctx) ->
+				spy = new orderingSpy(['a', 'b', 'c'])
+				assert(ctx.dir)
+				ctx.then (n) ->
+					spy.a()
+					n()
+				ctx.then (n) ->
+					spy.b()
+					setTimeout(n, 10)
+					ctx.then (n) ->
+						spy.c()
+						n()
+			e.enqueue(j)
+			j.on 'settled', -> cb()
+			
+		it 'Runs commands', (cb) ->
+			j = new TestJob (ctx) ->
+				ctx.run('touch test.txt')
+			e.enqueue(j)
+			j.on 'settled', ->
+				assert.equal(j.state, 'success')
+				cb()
+			
+		it 'Fails if commands fail', (cb) ->
+			j = new TestJob (ctx) ->
+				ctx.run('false')
+			e.enqueue(j)
+			j.on 'settled', ->
+				assert.equal(j.state, 'fail')
+				cb()

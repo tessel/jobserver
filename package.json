@@ -4,7 +4,7 @@
   "description": "ERROR: No README.md file found!",
   "main": "index.js",
   "scripts": {
-    "test": "mocha --compilers coffee:coffee-script/register"
+    "test": "mocha --compilers coffee:coffee-script/register -R spec"
   },
   "repository": "",
   "author": "Kevin Mehall",
@@ -16,6 +16,8 @@
   "dependencies": {
     "send": "~0.2.0",
     "server-event": "~1.0.1",
-    "express": "~4.4.5"
+    "express": "~4.4.5",
+    "rimraf": "~2.2.8",
+    "temp": "~0.8.0"
   }
 }
