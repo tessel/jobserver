@@ -257,6 +257,7 @@ class TeeStream extends Transform
 	Context: class Context extends TeeStream
 		constructor: (@job)->
 			super()
+			@_completed = false
 			@queue = []
 			# Note: this needs to be piped somewhere by default so the Transform doesn't accumulate data.
 			# If not stdout, then a null sink, or some other way of fixing this.
@@ -275,6 +276,10 @@ class TeeStream extends Transform
 		_done: (err) ->
 			if err
 				@write("Failed with error: #{err.stack}")
+			if @_completed
+				console.trace("Job #{@job.constructor.name} completed multiple times")
+				return
+			@_completed = true
 				
 			@after (e) =>
 				throw e if e
