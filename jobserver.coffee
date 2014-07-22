@@ -247,8 +247,11 @@ class TeeStream extends Transform
 		ctx = new this.Context(job)
 		ctx.before (err) ->
 			throw err if err
-			job.beforeRun(ctx)
-			job.run(ctx)
+			try
+				job.beforeRun(ctx)
+				job.run(ctx)
+			catch e
+				ctx._done(e)
 	
 	# An Executor provides a Job a Context to access resources
 	Context: class Context extends TeeStream
