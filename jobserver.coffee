@@ -42,6 +42,9 @@ STATES = [
 			doneCb() if doneCb
 
 		job.submitted(this)
+		
+	job: (id) ->
+		@activeJobs[id]
 
 	jsonableState: ->
 		jobs = for id, job of @activeJobs
@@ -80,6 +83,10 @@ class TeeStream extends Transform
 	constructor: ->
 		super()
 		@log = ''
+		
+	pipeAll: (o) ->
+		o.write(@log)
+		@pipe(o)
 
 	_transform: (chunk, encoding, callback) ->
 		@log += chunk.toString('utf8')
@@ -189,7 +196,7 @@ class TeeStream extends Transform
 		if @settled()
 			@emit 'settled'
 
-	beforeRun: ->
+	beforeRun: (@ctx) ->
 		@startTime = new Date()
 		@saveState 'running'
 		
@@ -240,7 +247,7 @@ class TeeStream extends Transform
 		ctx = new this.Context(job)
 		ctx.before (err) ->
 			throw err if err
-			job.beforeRun()
+			job.beforeRun(ctx)
 			job.run(ctx)
 	
 	# An Executor provides a Job a Context to access resources
@@ -248,6 +255,9 @@ class TeeStream extends Transform
 		constructor: (@job)->
 			super()
 			@queue = []
+			# Note: this needs to be piped somewhere by default so the Transform doesn't accumulate data.
+			# If not stdout, then a null sink, or some other way of fixing this.
+			@pipe(process.stdout)
 			
 		before: (cb) ->
 			setImmediate(cb)

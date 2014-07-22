@@ -135,3 +135,15 @@ body>header>a {
 	background: #333;
 	color: white;
 }
+
+#title {
+	padding: 16px;
+	font-family: monospace;
+	font-size: 24px;
+}
+
+#log {
+	padding: 16px;
+	font-family: monospace;
+	font-size: 16px;
+}
