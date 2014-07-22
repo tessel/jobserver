@@ -275,7 +275,8 @@ class TeeStream extends Transform
 			
 		_done: (err) ->
 			if err
-				@write("Failed with error: #{err.stack}")
+				@write("Failed with error: #{err.stack ? err}\n")
+				
 			if @_completed
 				console.trace("Job #{@job.constructor.name} completed multiple times")
 				return
