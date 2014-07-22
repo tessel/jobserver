@@ -94,12 +94,12 @@ class TeeStream extends Transform
 		callback()
 
 # Object containing the state and logic for a job. Subclasses can override the behavior
-@Job = class Job extends EventEmitter
-	constructor: (@executor=undefined, @pure=false, @inputs={}, @explicitDependencies=[], resultNames=[]) ->
+@Job = class Job extends EventEmitter	
+	constructor: (@executor, @inputs={}) ->
+		@pure = false
+		@explicitDependencies = []
 		@state = null
 		@result = {}
-		for key in resultNames
-			@result[key] = new FutureResult(this, key)
 
 	jsonableState: ->
 		{@id, @name, @description, @state, settled: @settled()}
