@@ -282,6 +282,8 @@ class TeeStream extends Transform
 
 	getBlob: (id, cb) ->
 		blob = @blobs[id]
+		#read the file
+		blob = new Blob(this, blob.id, {path: blob.meta.path}, fs.readFileSync(blob.meta.path))
 		setImmediate ->
 			cb(blob)
 		return

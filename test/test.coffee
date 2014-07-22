@@ -36,18 +36,22 @@ describe 'blobStoreLocal', ->
 			assert.equal(put.id, blob2.id)
 			next()
 
-	it 'loads all files on fs during construction', ->
+	it 'loads all files on fs during construction', (next) ->
 		# create a bunch of test data
 		setupTestEnv()
 		s = new jobserver.BlobStoreLocal(process.env.LOCAL_STORE_TEST)
-		s.putBlob('123qweasd')
+		first = s.putBlob('123qweasd')
 		s.putBlob('123qweasd')
 		s.putBlob('123qweasd1')
 		s.putBlob('123qweasd2')
-
 		# should have 3 items
 		otherBlobStore = new jobserver.BlobStoreLocal(process.env.LOCAL_STORE_TEST)
 		assert.equal(Object.keys(otherBlobStore.blobs).length, 3)
+
+		#make sure that getblob calls can read files
+		s.getBlob first.id , (blobData) ->
+			assert.equal(blobData.cached.toString(), '123qweasd')
+			next()
 
 # sets up test fs area
 setupTestEnv = ->
