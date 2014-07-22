@@ -12,7 +12,7 @@ class SSEStream extends Transform
     this.push("event: end\ndata: null\n\n")
     callback()
 
-exports = (jobserver) ->
+module.exports = web = (server) ->
   app = express()
   app.use(express.static('ui'));
 
@@ -20,20 +20,20 @@ exports = (jobserver) ->
     console.log('jobs')
     res.format
       'application/json': ->
-        res.send(jobserver.jsonableState())
+        res.send(server.jsonableState())
 
       'text/html': ->
         res.sendfile('./ui/index.html')
 
       'text/event-stream': ->
         serverEvent(req, res)
-        res.sse('hello', jobserver.jsonableState())
+        res.sse('hello', server.jsonableState())
 
         sendJobUpdate = (job) ->
           res.sse('job', job.jsonableState())
 
-        jobserver.on 'submitted', sendJobUpdate
-        jobserver.on 'job.state', sendJobUpdate
+        server.on 'submitted', sendJobUpdate
+        server.on 'job.state', sendJobUpdate
 
   app.get '/jobs/:id', (req, res) ->
     job = server.job(req.params.id)
@@ -74,7 +74,7 @@ if module is require.main
   server = new jobserver.Server(jobstore, blobstore)
   e1 = new jobserver.SeriesExecutor(new jobserver.Executor())
   e2 = new jobserver.SeriesExecutor(new jobserver.Executor())
-  exports(server).listen(8080)
+  web(server).listen(8080)
 
   n = 0
 
