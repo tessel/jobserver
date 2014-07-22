@@ -38,7 +38,7 @@ STATES = [
 			server.emit 'job.state', this, state
 
 		job.once 'settled', =>
-			delete @activeJobs[job.id]
+			#delete @activeJobs[job.id]
 			doneCb() if doneCb
 
 		job.submitted(this)
@@ -47,7 +47,7 @@ STATES = [
 		@activeJobs[id]
 
 	jsonableState: ->
-		jobs = for id, job of @activeJobs
+		jobs = for id, job of @activeJobs when not job.settled()
 			job.jsonableState()
 
 		{jobs}
