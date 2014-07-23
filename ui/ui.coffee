@@ -34,7 +34,7 @@ class JobTile extends Backbone.View
 		unless @$header
 			@$el.empty().addClass('job')
 			@$header = $("<header>").appendTo(@$el)
-			@$title = $("<h1>").text(@model.get 'description').appendTo(@$header)
+			@$title = $("<h1>").text(@model.get('description') or @model.get('name')).appendTo(@$header)
 			
 			@$el.click =>
 				app.selectJob(@model)
