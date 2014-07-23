@@ -296,14 +296,14 @@ class TeeStream extends Transform
 				
 				if @queue.length
 					f = @queue[0]
-					setImmediate -> f(next)
+					setImmediate => f.call(this, next)
 				else
 					@_done()
 				
 				return null
 				
 			if @queue.push(fn) == 1
-				setImmediate -> fn(next)
+				setImmediate => fn.call(this, next)
 				
 
 # An executor combinator that runs jobs one at a time in series on a specified executor
