@@ -6,6 +6,7 @@ util = require('util')
 temp = require('temp')
 rimraf = require('rimraf')
 child_process = require('child_process')
+path = require 'path'
 
 BLOB_HMAC_KEY = 'adb97d77011182f0b6884f7a6d32280a'
 JOB_HMAC_KEY  = 'fb49246c50d78d460a5d666e943230fa'
@@ -327,22 +328,35 @@ class TeeStream extends Transform
 	Context: class Context extends Executor::Context
 		before: (cb) ->
 			temp.mkdir "jobserver-#{@job.name}", (err, @dir) =>
-				@env = {}
-				@cwd = @dir
+				@_env = {}
+				for k, v of process.env
+					@_env[k] = v
+				@_cwd = @dir
 				@write("Working directory: #{@dir}\n")
 				cb(err)
 
 		after: (cb) -> 
 			rimraf @dir, cb
-			
+
+		env: (e) ->
+			@then (cb) ->
+				for k, v of e
+					@_env[k] = v
+				cb()
+
+		cd: (p) ->
+			@then (cb) ->
+				@_cwd = path.resolve(@_cwd, p)
+				cb()
+
 		run: (command, args) ->
 			@then (cb) =>
 				unless util.isArray(args)
 					args = ['-c', command]
 					command = 'sh'
-					
-				@write("$ #{command + if args then args.join(' ') else ''}\n")
-				p = child_process.spawn command, args, {@cwd, @env}
+
+				@write("$ #{command + if args then ' ' + args.join(' ') else ''}\n")
+				p = child_process.spawn command, args, {cwd: @_cwd, env: @_env}
 				p.stdout.pipe(this, {end: false})
 				p.stderr.pipe(this, {end: false})
 				p.on 'close', (code) =>
