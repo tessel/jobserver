@@ -6,8 +6,8 @@ describe 'blobStoreMem', ->
 		s = new jobserver.BlobStoreMem()
 		data = new Buffer('asdfghjkl')
 		b1 = s.putBlob(data)
-		s.getBlob b1.id, (b2) ->
-			assert.equal(b1.data, b2.data)
+		s.getBlob b1.id, (resultData) ->
+			assert.equal(data, resultData)
 			next()
 
 	it 'hashes identical blobs to the same id', ->
@@ -144,8 +144,13 @@ describe 'SeriesExecutor', ->
 			j3.on 'settled', -> cb()
 			
 describe 'LocalExecutor', ->
+		server = null
 		e = null
+		blobstore = null
 		beforeEach ->
+			jobstore = new jobserver.JobStoreMem()
+			blobstore = new jobserver.BlobStoreMem()
+			server = new jobserver.Server(jobstore, blobstore)
 			e = new jobserver.LocalExecutor()
 			
 		it 'Runs subtasks with a queue', (cb) ->
@@ -178,4 +183,27 @@ describe 'LocalExecutor', ->
 			e.enqueue(j)
 			j.on 'settled', ->
 				assert.equal(j.state, 'fail')
+				cb()
+				
+		it 'Saves files', (cb) ->
+			j = new TestJob (ctx) ->
+				ctx.run('echo hello > test.txt')
+				ctx.get('test', 'test.txt')
+			j.executor = e
+			server.submit j, ->
+				assert.equal(j.state, 'success')
+				j.result.test.getBuffer (data) ->
+					assert.equal(data.toString('utf8'), 'hello\n')
+					cb()
+				
+		it 'Loads files', (cb) ->
+			b = blobstore.putBlob(new Buffer("Hello\n"))
+			j = new TestJob (ctx) ->
+				ctx.put(@inputs.test, 'test.txt')
+				ctx.run 'echo Hello > test2.txt'
+				ctx.run 'diff -u test.txt test2.txt'
+			j.executor = e
+			j.inputs.test = b
+			server.submit j, ->
+				assert.equal(j.state, 'success')
 				cb()

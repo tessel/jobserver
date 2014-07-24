@@ -7,6 +7,7 @@ temp = require('temp')
 rimraf = require('rimraf')
 child_process = require('child_process')
 path = require 'path'
+fs = require 'fs'
 
 BLOB_HMAC_KEY = 'adb97d77011182f0b6884f7a6d32280a'
 JOB_HMAC_KEY  = 'fb49246c50d78d460a5d666e943230fa'
@@ -57,10 +58,12 @@ STATES = [
 @FutureResult = class FutureResult
 	constructor: (@job, @key) ->
 	get: ->
-		if @job.status == 'success'
+		if @job.state == 'success'
 			@job.result[@key]
 		else
 			throw new Error("Accessing result of job with status #{@job.status}")
+			
+	getBuffer: (cb) -> @get().getBuffer(cb)
 
 # `BlobStore` is the abstract base class for result file data storage.
 # Subclasses persist Buffers and retrieve them by hash.
@@ -74,7 +77,9 @@ STATES = [
 
 # An item in a BlobStore
 class Blob
-	constructor: (@store, @id, @meta, @cached) ->
+	constructor: (@store, @id, @meta) ->
+		
+	getBuffer: (cb) -> @store.getBlob(@id, cb)
 
 # Abstact base class for database of job history
 @JobStore = class JobStore
@@ -95,12 +100,21 @@ class TeeStream extends Transform
 		callback()
 
 # Object containing the state and logic for a job. Subclasses can override the behavior
-@Job = class Job extends EventEmitter	
+@Job = class Job extends EventEmitter
+	resultNames: []
+	
 	constructor: (@executor, @inputs={}) ->
 		@pure = false
 		@explicitDependencies = []
 		@state = null
 		@result = {}
+	
+		for key in @resultNames
+			@result[key] = @result[key] = new FutureResult(this, key)
+			
+		@config()
+			
+	config: ->
 
 	jsonableState: ->
 		{@id, @name, @description, @state, settled: @settled()}
@@ -109,9 +123,9 @@ class TeeStream extends Transform
 		@executor ?= @server.defaultExecutor
 		
 		@dependencies = @explicitDependencies.slice(0)
-		for i in @inputs
-			if i instanceof FutureResult
-				@dependencies.push(i.job)
+		for k, v of @inputs
+			if v instanceof FutureResult
+				@dependencies.push(v.job)
 
 		for dep in @dependencies
 			if not dep.state?
@@ -209,7 +223,6 @@ class TeeStream extends Transform
 			@emit 'computed'
 
 		if result
-			@result = result
 			@saveState('success')
 		else
 			@saveState('fail')
@@ -230,8 +243,8 @@ class TeeStream extends Transform
 	putBlob: (buffer, meta) ->
 		id = @hash(buffer)
 		if not @blobs[id]
-			@blobs[id] = new Blob(this, id, meta, buffer)
-		@blobs[id]
+			@blobs[id] = buffer
+		new Blob(this, id, meta)
 
 	getBlob: (id, cb) ->
 		v = @blobs[id]
@@ -361,4 +374,21 @@ class TeeStream extends Transform
 				p.stderr.pipe(this, {end: false})
 				p.on 'close', (code) =>
 					cb(if code != 0 then "Exited with #{code}")
+					
+		put: (content, filename) ->
+			@then (cb) =>
+				content.getBuffer (data) =>
+					console.log("#{data.length} bytes to #{path.resolve(@_cwd, filename)}")
+					fs.writeFile path.resolve(@_cwd, filename), data, cb
+			
+		get: (output, filename) ->
+			@then (cb) =>
+				fs.readFile path.resolve(@_cwd, filename), (err, data) =>
+					return cb(err) if err
+					@job.result[output] = @job.server.blobStore.putBlob(data, {name: output})
+					console.log("#{data.length} bytes from #{path.resolve(@_cwd, filename)} as #{output} on #{@job.id}:", @job.result[output])
+					cb()
+			
+		git_clone: (repo, branch, dir) ->
+			@run('git', ['clone', '--depth=1', '-b', branch, '--', repo, dir])
 
