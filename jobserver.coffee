@@ -64,6 +64,7 @@ STATES = [
 			throw new Error("Accessing result of job with status #{@job.status}")
 			
 	getBuffer: (cb) -> @get().getBuffer(cb)
+	getId: -> @get().id
 
 # `BlobStore` is the abstract base class for result file data storage.
 # Subclasses persist Buffers and retrieve them by hash.
@@ -80,6 +81,7 @@ class Blob
 	constructor: (@store, @id, @meta) ->
 		
 	getBuffer: (cb) -> @store.getBlob(@id, cb)
+	getId: -> @id
 
 # Abstact base class for database of job history
 @JobStore = class JobStore
@@ -258,7 +260,7 @@ class TeeStream extends Transform
 # An Executor manages the execution of a set of jobs. May also wrap access to an execution resource
 @Executor = class Executor
 	enqueue: (job) ->
-		ctx = new this.Context(job)
+		ctx = @makeContext(job)
 		ctx.before (err) ->
 			throw err if err
 			try
@@ -266,6 +268,9 @@ class TeeStream extends Transform
 				job.run(ctx)
 			catch e
 				ctx._done(e)
+	
+	makeContext: (job) ->
+		new this.Context(job)
 	
 	# An Executor provides a Job a Context to access resources
 	Context: class Context extends TeeStream
@@ -342,19 +347,21 @@ class TeeStream extends Transform
 		before: (cb) ->
 			temp.mkdir "jobserver-#{@job.name}", (err, @dir) =>
 				@_env = {}
-				for k, v of process.env
-					@_env[k] = v
+				@envImmediate(process.env)
 				@_cwd = @dir
 				@write("Working directory: #{@dir}\n")
 				cb(err)
 
 		after: (cb) -> 
 			rimraf @dir, cb
+			
+		envImmediate: (e) ->
+			for k, v of e
+				@_env[k] = v
 
 		env: (e) ->
 			@then (cb) ->
-				for k, v of e
-					@_env[k] = v
+				@envImmediate(e)
 				cb()
 
 		cd: (p) ->
