@@ -1,5 +1,5 @@
 assert = require 'assert'
-jobserver = require '../jobserver'
+jobserver = require '../index'
 
 describe 'blobStoreMem', ->
 	it 'stores and retrieves blobs', (next) ->
