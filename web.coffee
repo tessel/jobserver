@@ -14,7 +14,8 @@ class SSEStream extends Transform
 
 module.exports = web = (server) ->
   app = express()
-  app.use(express.static('ui'));
+  app.use(express.static(__dirname + '/ui'));
+  index_page = __dirname + '/ui/index.html'
 
   app.get '/jobs', (req, res) ->
     console.log('jobs')
@@ -23,7 +24,7 @@ module.exports = web = (server) ->
         res.send(server.jsonableState())
 
       'text/html': ->
-        res.sendfile('./ui/index.html')
+        res.sendfile(index_page)
 
       'text/event-stream': ->
         serverEvent(req, res)
@@ -43,7 +44,7 @@ module.exports = web = (server) ->
         res.send({ job: 'foo', id: req.params.id })
 
       'text/html': ->
-        res.sendfile('./ui/index.html')
+        res.sendfile(index_page)
 
       'text/event-stream': ->
         serverEvent(req, res)
