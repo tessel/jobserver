@@ -8,6 +8,8 @@ rimraf = require('rimraf')
 child_process = require('child_process')
 path = require 'path'
 fs = require 'fs'
+async = require 'async'
+
 
 BLOB_HMAC_KEY = 'adb97d77011182f0b6884f7a6d32280a'
 JOB_HMAC_KEY  = 'fb49246c50d78d460a5d666e943230fa'
@@ -275,11 +277,10 @@ Context: class Context extends TeeStream
 	after: (cb) ->
 		setImmediate(cb)
 		
-	done: (result) ->
-		unless @queue.length
-			@_done(result)
+	_doSeries: (cb) ->
+		async.series @queue, @_done
 		
-	_done: (err) ->
+	_done: (err) =>
 		if err
 			@write("Failed with error: #{err.stack ? err}\n")
 			
@@ -293,23 +294,9 @@ Context: class Context extends TeeStream
 			@end()
 			@job.log = @log
 			@job.afterRun(!err)
-		
+			
 	then: (fn) ->
-		next = (err) =>
-			@queue.shift()
-			if err
-				return @_done(err)
-			
-			if @queue.length
-				f = @queue[0]
-				setImmediate => f.call(this, next)
-			else
-				@_done()
-			
-			return null
-			
-		if @queue.push(fn) == 1
-			setImmediate => fn.call(this, next)
+		@queue.push(fn)
 			
 	mixin: (obj) ->
 		for k, v of obj
@@ -321,6 +308,7 @@ Context: class Context extends TeeStream
 		try
 			job.beforeRun()
 			job.run(job.ctx)
+			job.ctx._doSeries()
 		catch e
 			job.ctx._done(e)
 
@@ -364,12 +352,12 @@ Context: class Context extends TeeStream
 			null
 
 		env: (e) ->
-			@then (cb) ->
+			@then (cb) =>
 				@envImmediate(e)
 				cb()
 
 		cd: (p) ->
-			@then (cb) ->
+			@then (cb) =>
 				@_cwd = path.resolve(@_cwd, p)
 				cb()
 
