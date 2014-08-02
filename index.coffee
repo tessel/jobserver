@@ -197,8 +197,10 @@ class TeeStream extends Transform
 
 		@_hash
 
-	enqueue: ->
+	enqueue: (executor) ->
+		@executor ?= executor
 		@saveState 'pending'
+		@ctx = new Context(this)
 		@executor.enqueue(this)
 
 	settled: ->
@@ -213,7 +215,7 @@ class TeeStream extends Transform
 		if @settled()
 			@emit 'settled'
 
-	beforeRun: (@ctx) ->
+	beforeRun: () ->
 		@startTime = new Date()
 		@saveState 'running'
 		
@@ -257,73 +259,70 @@ class TeeStream extends Transform
 @JobStoreMem = class JobStoreMem extends JobStore
 	constructor: ->
 
+# An Executor provides a Job a Context to access resources
+Context: class Context extends TeeStream
+	constructor: (@job)->
+		super()
+		@_completed = false
+		@queue = []
+		# Note: this needs to be piped somewhere by default so the Transform doesn't accumulate data.
+		# If not stdout, then a null sink, or some other way of fixing this.
+		@pipe(process.stdout)
+		
+	before: (cb) ->
+		setImmediate(cb)
+	
+	after: (cb) ->
+		setImmediate(cb)
+		
+	done: (result) ->
+		unless @queue.length
+			@_done(result)
+		
+	_done: (err) ->
+		if err
+			@write("Failed with error: #{err.stack ? err}\n")
+			
+		if @_completed
+			console.trace("Job #{@job.constructor.name} completed multiple times")
+			return
+		@_completed = true
+			
+		@after (e) =>
+			throw e if e
+			@end()
+			@job.log = @log
+			@job.afterRun(!err)
+		
+	then: (fn) ->
+		next = (err) =>
+			@queue.shift()
+			if err
+				return @_done(err)
+			
+			if @queue.length
+				f = @queue[0]
+				setImmediate => f.call(this, next)
+			else
+				@_done()
+			
+			return null
+			
+		if @queue.push(fn) == 1
+			setImmediate => fn.call(this, next)
+			
+	mixin: (obj) ->
+		for k, v of obj
+			this[k] = v
+
 # An Executor manages the execution of a set of jobs. May also wrap access to an execution resource
 @Executor = class Executor
 	enqueue: (job) ->
-		ctx = @makeContext(job)
-		ctx.before (err) ->
-			throw err if err
-			try
-				job.beforeRun(ctx)
-				job.run(ctx)
-			catch e
-				ctx._done(e)
-	
-	makeContext: (job) ->
-		new this.Context(job)
-	
-	# An Executor provides a Job a Context to access resources
-	Context: class Context extends TeeStream
-		constructor: (@job)->
-			super()
-			@_completed = false
-			@queue = []
-			# Note: this needs to be piped somewhere by default so the Transform doesn't accumulate data.
-			# If not stdout, then a null sink, or some other way of fixing this.
-			@pipe(process.stdout)
-			
-		before: (cb) ->
-			setImmediate(cb)
-		
-		after: (cb) ->
-			setImmediate(cb)
-			
-		done: (result) ->
-			unless @queue.length
-				@_done(result)
-			
-		_done: (err) ->
-			if err
-				@write("Failed with error: #{err.stack ? err}\n")
-				
-			if @_completed
-				console.trace("Job #{@job.constructor.name} completed multiple times")
-				return
-			@_completed = true
-				
-			@after (e) =>
-				throw e if e
-				@end()
-				@job.log = @log
-				@job.afterRun(!err)
-			
-		then: (fn) ->
-			next = (err) =>
-				@queue.shift()
-				if err
-					return @_done(err)
-				
-				if @queue.length
-					f = @queue[0]
-					setImmediate => f.call(this, next)
-				else
-					@_done()
-				
-				return null
-				
-			if @queue.push(fn) == 1
-				setImmediate => fn.call(this, next)
-				
+		try
+			job.beforeRun()
+			job.run(job.ctx)
+		catch e
+			job.ctx._done(e)
 
 # An executor combinator that runs jobs one at a time in series on a specified executor
 @SeriesExecutor = class SeriesExecutor extends Executor
@@ -343,21 +342,26 @@ class TeeStream extends Transform
 				@executor.enqueue(@currentJob)
 
 @LocalExecutor = class LocalExecutor extends Executor
-	Context: class Context extends Executor::Context
-		before: (cb) ->
-			temp.mkdir "jobserver-#{@job.name}", (err, @dir) =>
-				@_env = {}
-				@envImmediate(process.env)
-				@_cwd = @dir
-				@write("Working directory: #{@dir}\n")
-				cb(err)
-
-		after: (cb) -> 
-			rimraf @dir, cb
+	enqueue: (job) ->
+		ctx = job.ctx
+		temp.mkdir "jobserver-#{job.name}", (err, dir) =>
+			ctx.mixin @ctxMixin
+			ctx.dir = dir
+			ctx._cwd = dir
+			ctx._env = {}
+			ctx.envImmediate(process.env)
+			ctx.write("Working directory: #{dir}\n")
 			
+			ctx.on 'end', =>
+				rimraf dir, ->
+				
+			Executor::enqueue.call(this, job)
+	
+	ctxMixin:
 		envImmediate: (e) ->
 			for k, v of e
 				@_env[k] = v
+			null
 
 		env: (e) ->
 			@then (cb) ->
@@ -385,7 +389,7 @@ class TeeStream extends Transform
 		put: (content, filename) ->
 			@then (cb) =>
 				content.getBuffer (data) =>
-					console.log("#{data.length} bytes to #{path.resolve(@_cwd, filename)}")
+					@write("#{data.length} bytes to #{path.resolve(@_cwd, filename)}\n")
 					fs.writeFile path.resolve(@_cwd, filename), data, cb
 			
 		get: (output, filename) ->

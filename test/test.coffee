@@ -137,9 +137,9 @@ describe 'SeriesExecutor', ->
 					ctx.done(new Error("test failure"))
 				), 10
 
-			e.enqueue(j1)
-			e.enqueue(j2)
-			e.enqueue(j3)
+			j1.enqueue(e)
+			j2.enqueue(e)
+			j3.enqueue(e)
 			
 			j3.on 'settled', -> cb()
 			
@@ -166,13 +166,13 @@ describe 'LocalExecutor', ->
 					ctx.then (n) ->
 						spy.c()
 						n()
-			e.enqueue(j)
+			j.enqueue(e)
 			j.on 'settled', -> cb()
 			
 		it 'Runs commands', (cb) ->
 			j = new TestJob (ctx) ->
 				ctx.run('touch test.txt')
-			e.enqueue(j)
+			j.enqueue(e)
 			j.on 'settled', ->
 				assert.equal(j.state, 'success')
 				cb()
@@ -180,7 +180,7 @@ describe 'LocalExecutor', ->
 		it 'Fails if commands fail', (cb) ->
 			j = new TestJob (ctx) ->
 				ctx.run('false')
-			e.enqueue(j)
+			j.enqueue(e)
 			j.on 'settled', ->
 				assert.equal(j.state, 'fail')
 				cb()
