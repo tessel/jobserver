@@ -336,7 +336,7 @@ Context: class Context extends TeeStream
 			ctx.mixin @ctxMixin
 			ctx.dir = dir
 			ctx._cwd = dir
-			ctx._env = {}
+			ctx._env ?= {}
 			ctx.envImmediate(process.env)
 			ctx.write("Working directory: #{dir}\n")
 			
