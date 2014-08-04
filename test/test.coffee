@@ -40,9 +40,7 @@ describe 'Job', ->
 	jobstore = blobstore = server = null
 
 	beforeEach ->
-		jobstore = new jobserver.JobStoreMem()
-		blobstore = new jobserver.BlobStoreMem()
-		server = new jobserver.Server(jobstore, blobstore)
+		server = new jobserver.Server()
 		server.defaultExecutor = new jobserver.Executor()
 
 	it 'Runs and emits states and collects a log', (cb) ->
@@ -119,9 +117,7 @@ describe 'LocalExecutor', ->
 		e = null
 		blobstore = null
 		beforeEach ->
-			jobstore = new jobserver.JobStoreMem()
-			blobstore = new jobserver.BlobStoreMem()
-			server = new jobserver.Server(jobstore, blobstore)
+			server = new jobserver.Server()
 			e = new jobserver.LocalExecutor()
 			
 		it 'Runs subtasks with a queue', (cb) ->
@@ -168,7 +164,7 @@ describe 'LocalExecutor', ->
 					cb()
 				
 		it 'Loads files', (cb) ->
-			b = blobstore.putBlob(new Buffer("Hello\n"))
+			b = server.blobStore.putBlob(new Buffer("Hello\n"))
 			j = new TestJob (ctx) ->
 				ctx.put(@inputs.test, 'test.txt')
 				ctx.run 'echo Hello > test2.txt'

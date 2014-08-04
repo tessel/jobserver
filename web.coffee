@@ -43,7 +43,7 @@ module.exports = web = (server) ->
       
       res.format
         'application/json': ->
-          res.send({ job: 'foo', id: req.params.id })
+          res.send(job.jsonableState())
 
         'text/html': ->
           res.sendfile(index_page)
@@ -70,10 +70,7 @@ module.exports = web = (server) ->
 
 if module is require.main
   jobserver = require './index'
-
-  jobstore = new jobserver.JobStoreMem()
-  blobstore = new jobserver.BlobStoreMem()
-  server = new jobserver.Server(jobstore, blobstore)
+  server = new jobserver.Server()
   e1 = new jobserver.SeriesExecutor(new jobserver.Executor())
   e2 = new jobserver.SeriesExecutor(new jobserver.Executor())
   web(server).listen(8080)

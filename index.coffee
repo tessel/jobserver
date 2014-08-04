@@ -26,6 +26,12 @@ STATES = [
 # A `Server` maintains the global job list and aggregates events for the UI
 @Server = class Server extends EventEmitter
 	constructor: (@jobStore, @blobStore) ->
+		unless @blobStore
+			@blobStore = new BlobStoreMem()
+		unless @jobStore
+			JobStoreSQLite = require('./jobstore_sqlite')
+			@jobStore = new JobStoreSQLite(':memory:')
+			
 		@activeJobs = {}
 
 	submit: (job, doneCb) ->
@@ -40,7 +46,7 @@ STATES = [
 				server.emit 'job.state', this, state
 
 			job.once 'settled', =>
-				#delete @activeJobs[job.id]
+				delete @activeJobs[job.id]
 				doneCb() if doneCb
 
 			job.submitted(this)
@@ -104,12 +110,19 @@ class TeeStream extends Transform
 		this.push(chunk)
 		callback()
 
+@JobInfo = class JobInfo extends EventEmitter
+	jsonableState: ->
+		{@id, @name, @description, @state, settled: @settled()}
+		
+	settled: ->
+		@state in ['success', 'fail', 'abort']
+		
 # Object containing the state and logic for a job. Subclasses can override the behavior
-@Job = class Job extends EventEmitter
+@Job = class Job extends JobInfo
 	resultNames: []
+	pure: false
 	
 	constructor: (@executor, @inputs={}) ->
-		@pure = false
 		@explicitDependencies = []
 		@state = null
 		@result = {}
@@ -120,10 +133,7 @@ class TeeStream extends Transform
 		@config()
 			
 	config: ->
-
-	jsonableState: ->
-		{@id, @name, @description, @state, settled: @settled()}
-
+		
 	submitted: (@server) ->
 		@executor ?= @server.defaultExecutor
 		
@@ -206,9 +216,6 @@ class TeeStream extends Transform
 		@ctx = new Context(this)
 		@executor.enqueue(this)
 
-	settled: ->
-		@state in ['success', 'fail', 'abort']
-
 	saveState: (state) ->
 		if state not in STATES
 			throw new Error("Invalid status '#{state}'")
@@ -258,19 +265,6 @@ class TeeStream extends Transform
 		setImmediate ->
 			cb(v)
 		return
-
-@JobStoreMem = class JobStoreMem extends JobStore
-	constructor: ->
-		@jobs = {}
-		@counter = 0
-
-	addJob: (job, cb) ->
-		job.id = @counter++
-		@jobs[job.id] = job
-		cb(job)
-
-	getJob: (id, cb) ->
-		cb(@jobs[id])
 
 # An Executor provides a Job a Context to access resources
 Context: class Context extends TeeStream
