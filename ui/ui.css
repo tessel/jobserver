@@ -132,6 +132,10 @@ body>header>a {
 
 #info {
 	flex: 1;
+	display: flex;
+	flex-direction: column;
+	justify-content: flex-start;
+	align-items: stretch;
 	background: #333;
 	color: white;
 }
@@ -143,7 +147,41 @@ body>header>a {
 }
 
 #log {
+	flex: 1;
 	padding: 16px;
 	font-family: monospace;
 	font-size: 16px;
+	overflow-y: auto;
 }
+
+#log pre {
+	whitespace: pre-wrap;
+}
+
+/* Color scheme from travis-ci */
+.ansi .bold { font-weight: bold; }
+.ansi .italic { font-style: italic; }
+.ansi .black { color: #4e4e4e; }
+.ansi .black.bold { color: #7c7c7c; }
+.ansi .red { color: #ff6c60; }
+.ansi .red.bold { color: #ffb6b0; }
+.ansi .green { color: #a8ff60; }
+.ansi .green.bold { color: #ceffab; }
+.ansi .yellow { color: #ffffb6; }
+.ansi .yellow.bold { color: #ffffcb; }
+.ansi .blue { color: #96cbfe; }
+.ansi .blue.bold { color: #b5dcfe; }
+.ansi .magenta { color: #ff73fd; }
+.ansi .magenta.bold { color: #ff9cfe; }
+.ansi .cyan { color: #c6c5fe; }
+.ansi .cyan { color: #dfdffe; }
+.ansi .white { color: #eeeeee; }
+.ansi .white.bold { color: white; }
+.ansi .bg-black { background-color: #4e4e4e; }
+.ansi .bg-red { background-color: #ff6c60; }
+.ansi .bg-green { background-color: #a8ff60; }
+.ansi .bg-yellow { background-color: #ffffb6; }
+.ansi .bg-blue { background-color: #96cbfe; }
+.ansi .bg-magenta { background-color: #ff73fd; }
+.ansi .bg-cyan { background-color: #c6c5fe; }
+.ansi .bg-white { background-color: #eeeeee; }

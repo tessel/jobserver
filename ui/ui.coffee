@@ -1,6 +1,8 @@
 window.app = {}
 _.extend(app, Backbone.Events)
 
+logparse = require('./logparse')
+
 class JobModel extends Backbone.Model
 	logs: ->
 		console.log ("/jobs/#{@id}/logs")
@@ -59,10 +61,9 @@ class JobSidebar extends Backbone.View
 		@logs = app.selectedJob.logs()
 		@logs.addEventListener 'open', =>
 			console.log('open log')
-			@$('#log').empty()
+			@logparse = new logparse(@$('#log')[0])
 		@logs.addEventListener 'message', (e) =>
-			console.log('data', e.data)
-			@$('#log').append(document.createTextNode(JSON.parse(e.data)))
+			@logparse.push(JSON.parse(e.data))
 		@logs.addEventListener 'error', (e) ->
 			console.log('error', e)
 		@logs.addEventListener 'end', (e) =>

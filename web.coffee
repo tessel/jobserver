@@ -68,7 +68,7 @@ module.exports = web = (server) ->
   app
 
 if module is require.main
-  jobserver = require './jobserver'
+  jobserver = require './index'
 
   jobstore = new jobserver.JobStoreMem()
   blobstore = new jobserver.BlobStoreMem()
@@ -85,10 +85,18 @@ if module is require.main
     j.name = "test"
     j.description = "Test Job #{n += 1}"
     j.run = (ctx) ->
-      ctx.write("Start\n")
-      setTimeout (->
-        ctx.write("Done\n")
-        ctx.done()
-      ), 8000 * Math.random() + 1000
+      ctx.then (cb) ->
+        ctx.write("\x1b[32mFoo\rStart\x1b[39m\n")
+        setTimeout(cb, 7000 * Math.random() + 1000)
+      ctx.then (cb) ->
+        i = 0
+        t = setInterval (->
+          ctx.write "remote: Compressing objects: #{i}% (1/34)   \x1b[K\r"
+          i+=1
+          if i == 100
+            clearInterval(t)
+            ctx.write "remote: Compressing objects: 100% (1/1), done.\x1b[K\r\n"
+            cb()
+        ), 10
     server.submit(j)
   ), 4000
