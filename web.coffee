@@ -37,33 +37,34 @@ module.exports = web = (server) ->
         server.on 'job.state', sendJobUpdate
 
   app.get '/jobs/:id', (req, res) ->
-    job = server.job(req.params.id)
-    
-    res.format
-      'application/json': ->
-        res.send({ job: 'foo', id: req.params.id })
+    server.job req.params.id, (job) ->
+      unless job
+        return res.status(404).end("Not found")
+      
+      res.format
+        'application/json': ->
+          res.send({ job: 'foo', id: req.params.id })
 
-      'text/html': ->
-        res.sendfile(index_page)
+        'text/html': ->
+          res.sendfile(index_page)
 
-      'text/event-stream': ->
-        serverEvent(req, res)
+        'text/event-stream': ->
+          serverEvent(req, res)
 
   app.get '/jobs/:id/log', (req, res) ->
-    job = server.job(req.params.id)
-    
-    unless job?.ctx
-      return res.status(404).end("Not found")
-    
-    res.format
-      'text/plain': ->
-        res.send(job.ctx.log)
+    server.job req.params.id, (job) ->
+      unless job?.ctx
+        return res.status(404).end("Not found")
+      
+      res.format
+        'text/plain': ->
+          res.send(job.ctx.log)
 
-      'text/event-stream': ->
-        serverEvent(req, res)
-        s = new SSEStream()
-        job.ctx.pipeAll(s)
-        s.pipe(res)
+        'text/event-stream': ->
+          serverEvent(req, res)
+          s = new SSEStream()
+          job.ctx.pipeAll(s)
+          s.pipe(res)
 
   app
 

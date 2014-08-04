@@ -28,27 +28,28 @@ STATES = [
 	constructor: (@jobStore, @blobStore) ->
 		@activeJobs = {}
 
-	counter = 0
-	makeJobId: -> (counter++)
-
 	submit: (job, doneCb) ->
 		server = this
-		job.id = @makeJobId()
-		@activeJobs[job.id] = job
-
-		server.emit 'submit', job
-
-		job.on 'state', (state) ->
-			server.emit 'job.state', this, state
-
-		job.once 'settled', =>
-			#delete @activeJobs[job.id]
-			doneCb() if doneCb
-
-		job.submitted(this)
 		
-	job: (id) ->
-		@activeJobs[id]
+		@jobStore.addJob job, =>
+			@activeJobs[job.id] = job
+
+			server.emit 'submit', job
+
+			job.on 'state', (state) ->
+				server.emit 'job.state', this, state
+
+			job.once 'settled', =>
+				#delete @activeJobs[job.id]
+				doneCb() if doneCb
+
+			job.submitted(this)
+		
+	job: (id, cb) ->
+		if job = @activeJobs[id]
+			setImmediate -> cb(job)
+		else
+			@jobStore.getJob(id, cb)
 
 	jsonableState: ->
 		jobs = for id, job of @activeJobs when not job.settled()
@@ -260,6 +261,16 @@ class TeeStream extends Transform
 
 @JobStoreMem = class JobStoreMem extends JobStore
 	constructor: ->
+		@jobs = {}
+		@counter = 0
+
+	addJob: (job, cb) ->
+		job.id = @counter++
+		@jobs[job.id] = job
+		cb(job)
+
+	getJob: (id, cb) ->
+		cb(@jobs[id])
 
 # An Executor provides a Job a Context to access resources
 Context: class Context extends TeeStream
