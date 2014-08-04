@@ -1,23 +1,6 @@
 assert = require 'assert'
 jobserver = require '../index'
 
-describe 'blobStoreMem', ->
-	it 'stores and retrieves blobs', (next) ->
-		s = new jobserver.BlobStoreMem()
-		data = new Buffer('asdfghjkl')
-		b1 = s.putBlob(data)
-		s.getBlob b1.id, (resultData) ->
-			assert.equal(data, resultData)
-			next()
-
-	it 'hashes identical blobs to the same id', ->
-		s = new jobserver.BlobStoreMem()
-		data = new Buffer('asdfghjkl')
-		b1 = s.putBlob(data)
-		b2 = s.putBlob(data)
-		assert.equal(b1.id, b2.id)
-		assert.equal(b1.data, b2.data)
-
 # Takes a list of names and returns an object with methods with those names, which must be called in order
 orderingSpy = (events) ->
 	r = {}

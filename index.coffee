@@ -79,7 +79,7 @@ STATES = [
 		crypto.createHmac('sha256', BLOB_HMAC_KEY).update(buffer).digest().toString('base64')
 
 # An item in a BlobStore
-class Blob
+@Blob = class Blob
 	constructor: (@store, @id, @meta) ->
 		
 	getBuffer: (cb) -> @store.getBlob(@id, cb)
