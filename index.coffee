@@ -67,10 +67,7 @@ STATES = [
     @jobStore.getRelatedJobs(id, cb)
 
   jsonableState: ->
-    jobs = for id, job of @activeJobs when not job.settled()
-      job.jsonableState()
-
-    {jobs}
+    {}
 
 # A `FutureResult` is a reference to a result of a `Job` which may not yet have completed
 @FutureResult = class FutureResult

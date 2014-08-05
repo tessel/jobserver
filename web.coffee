@@ -17,6 +17,38 @@ module.exports = web = (server) ->
   app.use(express.static(__dirname + '/ui'));
   index_page = __dirname + '/ui/index.html'
 
+  connections = []
+
+  # Subscribe a stream to job updates
+  subscribe = (req, res, jobs) ->
+    serverEvent(req, res)
+    initialJobs = jobs ? (job for id, job of server.activeJobs)
+
+    res.sse 'hello',
+      server: server.jsonableState()
+      jobs: (job.jsonableState() for job in initialJobs)
+
+    res.jobs = if jobs?
+      job.id for job in jobs when not job.settled()
+    else null
+
+    connections.push(res)
+
+    res.on 'close', ->
+      i = connections.indexOf(res)
+      connections.splice(i, 1) if i >= 0
+      console.log 'closed response:', connections.length, 'left'
+
+  server.on 'job.state', (job) ->
+    msg = job.jsonableState()
+    for res in connections when res.jobs is null or res.jobs.indexOf(job.id) != -1
+      res.sse('job', msg)
+
+  server.on 'submitted', (job) ->
+    msg = job.jsonableState()
+    for res in connections when res.jobs is null
+      res.sse('job', msg)
+
   app.get '/jobs', (req, res) ->
     console.log('jobs')
     res.format
@@ -27,14 +59,7 @@ module.exports = web = (server) ->
         res.sendfile(index_page)
 
       'text/event-stream': ->
-        serverEvent(req, res)
-        res.sse('hello', server.jsonableState())
-
-        sendJobUpdate = (job) ->
-          res.sse('job', job.jsonableState())
-
-        server.on 'submitted', sendJobUpdate
-        server.on 'job.state', sendJobUpdate
+        subscribe(req, res, null)
 
   app.get '/jobs/:id', (req, res) ->
     server.job req.params.id, (job) ->
@@ -47,9 +72,6 @@ module.exports = web = (server) ->
 
         'text/html': ->
           res.sendfile(index_page)
-
-        'text/event-stream': ->
-          serverEvent(req, res)
 
   app.get '/jobs/:id/log', (req, res) ->
     server.job req.params.id, (job) ->
@@ -65,6 +87,9 @@ module.exports = web = (server) ->
           s = new SSEStream()
           job.ctx.pipeAll(s)
           s.pipe(res)
+
+          res.on 'close', ->
+            job.ctx.unpipe(s)
 
   app
 
