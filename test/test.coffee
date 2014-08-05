@@ -80,6 +80,20 @@ describe 'Job', ->
 			jobs[5].assertRanAfter(jobs[3])
 			jobs[5].assertRanAfter(jobs[4])
 
+		checkRelated = (id, relatedIds, cb) ->
+			server.relatedJobs jobs[id].id, (l) ->
+				assert.deepEqual (i.id for i in l).sort(), (jobs[i].id for i in relatedIds).sort()
+				cb()
+
+		it 'persists children of root jobs to the database', (done) ->
+			checkRelated 5, [0, 1, 2, 3, 4, 5], done
+
+		it 'persists parents of child jobs to the database', (done) ->
+			checkRelated 0, [0, 1, 2, 3, 5], done
+
+		it 'persists children and parents of middle jobs to the database', (done) ->
+			checkRelated 2, [0, 2, 3, 5], done
+
 	it 'Generates implicit dependencies based on input'
 	it 'Rejects dependency cycles'
 	it 'Hashes consistently'
