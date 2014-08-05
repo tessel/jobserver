@@ -186,6 +186,7 @@ class TeeStream extends Transform
 					ready = false
 
 		if ready
+			@emit 'inputsReady'
 			if @pure
 				@server.jobStore.resultByHash @hash(), (completion) =>
 					if completion

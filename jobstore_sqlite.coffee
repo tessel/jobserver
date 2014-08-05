@@ -6,8 +6,10 @@ jobCols = [
   'name'
   'description'
   'state'
+  'submittedBy'
+  'executorInfo'
+  'fromCache'
   'pure'
-  'parentJob'
   'submitTime'
   'startTime'
   'endTime'
@@ -40,16 +42,15 @@ module.exports = class JobStoreSQLite extends JobStore
       @db.run "CREATE TABLE inputs (
         jobId,
         name,
-        value,
-        fromJob
+        value
       );"
       @db.run "CREATE INDEX inputs_jobId ON inputs (jobId);"
-      @db.run "CREATE TABLE outputs (
+      @db.run "CREATE TABLE results (
         jobId,
         name,
         value
       );"
-      @db.run "CREATE INDEX outputs_jobId ON outputs (jobId);"
+      @db.run "CREATE INDEX results_jobId ON results (jobId);"
 
   addJob: (job, cb) ->
     @db.run "INSERT INTO jobs (#{jobCols.join(',')}) VALUES (#{('?' for i in jobCols).join(',')});",
@@ -58,15 +59,22 @@ module.exports = class JobStoreSQLite extends JobStore
           throw err
         job.id = this.lastID
         cb(job)
-        
+
     @listen job
-  
+
   listen: (job) ->
     job.on 'state', =>
       @updateJob(job)
-    
+
     job.on 'dependencyAdded', (dependency) =>
       @addDependency(job, dependency)
+
+    job.on 'inputsReady', =>
+      @addInputs(job)
+
+    job.on 'computed', =>
+      @addResults(job)
+
   jobFromRow: (row) ->
     return null unless row
     j = new JobInfo()
@@ -74,7 +82,7 @@ module.exports = class JobStoreSQLite extends JobStore
     for k in jobCols
       j[k] = row[k]
     j
-      
+
   getJob: (id, cb) ->
     @db.get "SELECT id, #{jobCols.join(',')} FROM jobs WHERE id=?;", [id], (err, row) =>
       if err
@@ -82,16 +90,16 @@ module.exports = class JobStoreSQLite extends JobStore
       cb(@jobFromRow(row))
 
   updateJob: (job) ->
-    @db.run "UPDATE jobs SET state=?, startTime=?,   endTime=?,  logBlob=? WHERE id=?",
-                         [job.state, job.startTime, job.endTime,
+    @db.run "UPDATE jobs SET state=?, hash=?, fromCache=?, startTime=?, endTime=?, logBlob=? WHERE id=?",
+                         [job.state, job._hash, job.fromCache, job.startTime, job.endTime,
                          job.logBlob?.id, job.id]
-  
+
   addDependency: (job, dep) ->
     @db.run "INSERT INTO jobs_closure (parent, child, depth)
                SELECT p.parent, c.child, p.depth+c.depth+1
                FROM jobs_closure p, jobs_closure c
                WHERE p.child=? AND c.parent=?", [job.id, dep.id]
-               
+
   getRelatedJobs: (id, cb) ->
     @db.all "SELECT id, #{jobCols.join(',')} FROM jobs WHERE id IN (
               SELECT child  FROM jobs_closure WHERE parent=? UNION ALL
@@ -99,4 +107,7 @@ module.exports = class JobStoreSQLite extends JobStore
       console.error(err) if err
       return cb(null) unless rows
       cb(@jobFromRow(row) for row in rows)
-      
+
+  addInputs: (job) ->
+  addOutputs: (job) ->
+
