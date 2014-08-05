@@ -41,9 +41,6 @@ class JobTile extends Backbone.View
       @$el.click =>
         app.selectJob(@model)
 
-    if @model.get('settled')
-      setTimeout (=> @$el.slideUp(500, => @remove())), 4000
-
     @$el
 
 app.selectJob = (job) ->
@@ -70,8 +67,11 @@ class JobSidebar extends Backbone.View
       console.log("stream end")
       @logs.close()
 
-connect = ->
-  app.eventsource = new EventSource('/jobs')
+connect = (path) ->
+  if app.eventsource
+    app.eventsource.close()
+
+  app.eventsource = new EventSource(path)
 
   app.eventsource.addEventListener 'open', ->
     console.log('open')
@@ -92,10 +92,24 @@ connect = ->
   listen 'job', (m) ->
     app.jobs.add(m, {merge: true})
 
-  sidebar = new JobSidebar({el: '#info'})
+
+
+class Router extends Backbone.Router
+  routes:
+    '': 'allJobs'
+    'jobs': 'allJobs'
+    'jobs/:id': 'relatedJobs'
+
+  allJobs: ->
+    connect('/jobs')
+
+  relatedJobs: (id) ->
+    connect("/jobs/#{id}/related")
+
 
 $().ready ->
   app.jobs = new JobCollection()
   app.list = new ListView()
-
-  connect()
+  app.sidebar = new JobSidebar({el: '#info'})
+  new Router()
+  Backbone.history.start({pushState: true});

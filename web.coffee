@@ -73,6 +73,18 @@ module.exports = web = (server) ->
         'text/html': ->
           res.sendfile(index_page)
 
+  app.get '/jobs/:id/related', (req, res) ->
+    server.relatedJobs req.params.id, (jobs) ->
+      res.format
+        'application/json': ->
+          res.send(job.jsonableState() for job in jobs)
+
+        'text/html': ->
+          res.sendfile(index_page)
+
+        'text/event-stream': ->
+          subscribe(req, res, jobs)
+
   app.get '/jobs/:id/log', (req, res) ->
     server.job req.params.id, (job) ->
       unless job?.ctx

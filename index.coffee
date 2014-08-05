@@ -58,12 +58,14 @@ STATES = [
       job.submitted(this)
 
   job: (id, cb) ->
+    id = parseInt(id, 10)
     if job = @activeJobs[id]
       setImmediate -> cb(job)
     else
       @jobStore.getJob(id, cb)
 
   relatedJobs: (id, cb) ->
+    id = parseInt(id, 10)
     @jobStore.getRelatedJobs(id, cb)
 
   jsonableState: ->
