@@ -15,401 +15,400 @@ BLOB_HMAC_KEY = 'adb97d77011182f0b6884f7a6d32280a'
 JOB_HMAC_KEY  = 'fb49246c50d78d460a5d666e943230fa'
 
 STATES = [
-	'waiting'   # depends on outputs of other jobs that have not finished yet
-	'pending'   # ready to run, but blocked on hardware resources
-	'running'   # self-explanatory
-	'success'   # Ran and produced its outputs
-	'fail'      # Ran and failed to produce its outputs. This status is cached. Another run with the same inputs would also fail.
-	'abort'     # Ran and did not produce its output due to e.g. a network problem. Running again may succeed.
+  'waiting'   # depends on outputs of other jobs that have not finished yet
+  'pending'   # ready to run, but blocked on hardware resources
+  'running'   # self-explanatory
+  'success'   # Ran and produced its outputs
+  'fail'      # Ran and failed to produce its outputs. This status is cached. Another run with the same inputs would also fail.
+  'abort'     # Ran and did not produce its output due to e.g. a network problem. Running again may succeed.
 ]
 
 # A `Server` maintains the global job list and aggregates events for the UI
 @Server = class Server extends EventEmitter
-	constructor: (@jobStore, @blobStore) ->
-		unless @blobStore
-			@blobStore = new BlobStoreMem()
-		unless @jobStore
-			JobStoreSQLite = require('./jobstore_sqlite')
-			@jobStore = new JobStoreSQLite(':memory:')
-			
-		@activeJobs = {}
+  constructor: (@jobStore, @blobStore) ->
+    unless @blobStore
+      @blobStore = new BlobStoreMem()
+    unless @jobStore
+      JobStoreSQLite = require('./jobstore_sqlite')
+      @jobStore = new JobStoreSQLite(':memory:')
 
-	submit: (job, doneCb) ->
-		server = this
+    @activeJobs = {}
 
-		if job.alreadySubmitted
-			if doneCb
-				job.once 'settled', doneCb
-			return
-		job.alreadySubmitted = true
-		
-		@jobStore.addJob job, =>
-			@activeJobs[job.id] = job
+  submit: (job, doneCb) ->
+    server = this
 
-			server.emit 'submit', job
+    if job.alreadySubmitted
+      if doneCb
+        job.once 'settled', doneCb
+      return
+    job.alreadySubmitted = true
 
-			job.on 'state', (state) ->
-				server.emit 'job.state', this, state
+    @jobStore.addJob job, =>
+      @activeJobs[job.id] = job
 
-			job.once 'settled', =>
-				delete @activeJobs[job.id]
-				doneCb() if doneCb
+      server.emit 'submit', job
 
-			job.submitted(this)
-		
-	job: (id, cb) ->
-		if job = @activeJobs[id]
-			setImmediate -> cb(job)
-		else
-			@jobStore.getJob(id, cb)
-			
-	relatedJobs: (id, cb) ->
-		@jobStore.getRelatedJobs(id, cb)
+      job.on 'state', (state) ->
+        server.emit 'job.state', this, state
 
-	jsonableState: ->
-		jobs = for id, job of @activeJobs when not job.settled()
-			job.jsonableState()
+      job.once 'settled', =>
+        delete @activeJobs[job.id]
+        doneCb() if doneCb
 
-		{jobs}
+      job.submitted(this)
+
+  job: (id, cb) ->
+    if job = @activeJobs[id]
+      setImmediate -> cb(job)
+    else
+      @jobStore.getJob(id, cb)
+
+  relatedJobs: (id, cb) ->
+    @jobStore.getRelatedJobs(id, cb)
+
+  jsonableState: ->
+    jobs = for id, job of @activeJobs when not job.settled()
+      job.jsonableState()
+
+    {jobs}
 
 # A `FutureResult` is a reference to a result of a `Job` which may not yet have completed
 @FutureResult = class FutureResult
-	constructor: (@job, @key) ->
-	get: ->
-		if @job.state == 'success'
-			@job.result[@key]
-		else
-			throw new Error("Accessing result of job with status #{@job.status}")
-			
-	getBuffer: (cb) -> @get().getBuffer(cb)
-	getId: -> @get().id
+  constructor: (@job, @key) ->
+  get: ->
+    if @job.state == 'success'
+      @job.result[@key]
+    else
+      throw new Error("Accessing result of job with status #{@job.status}")
+
+  getBuffer: (cb) -> @get().getBuffer(cb)
+  getId: -> @get().id
 
 # `BlobStore` is the abstract base class for result file data storage.
 # Subclasses persist Buffers and retrieve them by hash.
 @BlobStore = class BlobStore
-	newBlob: (buffer, meta) ->
-		throw new Error("Abstract method")
-	getBlob: (id, cb) ->
-		throw new Error("Abstract method")
-	hash: (buffer) ->
-		crypto.createHmac('sha256', BLOB_HMAC_KEY).update(buffer).digest().toString('base64')
+  newBlob: (buffer, meta) ->
+    throw new Error("Abstract method")
+  getBlob: (id, cb) ->
+    throw new Error("Abstract method")
+  hash: (buffer) ->
+    crypto.createHmac('sha256', BLOB_HMAC_KEY).update(buffer).digest().toString('base64')
 
 # An item in a BlobStore
 @Blob = class Blob
-	constructor: (@store, @id, @meta) ->
-		
-	getBuffer: (cb) -> @store.getBlob(@id, cb)
-	getId: -> @id
+  constructor: (@store, @id, @meta) ->
+
+  getBuffer: (cb) -> @store.getBlob(@id, cb)
+  getId: -> @id
 
 # Abstact base class for database of job history
 @JobStore = class JobStore
 
 # A Stream transformer that captures a copy of the streamed data and passes it through
 class TeeStream extends Transform
-	constructor: ->
-		super()
-		@log = ''
-		
-	pipeAll: (o) ->
-		o.write(@log)
-		@pipe(o)
+  constructor: ->
+    super()
+    @log = ''
 
-	_transform: (chunk, encoding, callback) ->
-		@log += chunk.toString('utf8')
-		this.push(chunk)
-		callback()
+  pipeAll: (o) ->
+    o.write(@log)
+    @pipe(o)
+
+  _transform: (chunk, encoding, callback) ->
+    @log += chunk.toString('utf8')
+    this.push(chunk)
+    callback()
 
 @JobInfo = class JobInfo extends EventEmitter
-	jsonableState: ->
-		{@id, @name, @description, @state, settled: @settled()}
-		
-	settled: ->
-		@state in ['success', 'fail', 'abort']
-		
+  jsonableState: ->
+    {@id, @name, @description, @state, settled: @settled()}
+
+  settled: ->
+    @state in ['success', 'fail', 'abort']
+
 # Object containing the state and logic for a job. Subclasses can override the behavior
 @Job = class Job extends JobInfo
-	resultNames: []
-	pure: false
-	
-	constructor: (@executor, @inputs={}) ->
-		@explicitDependencies = []
-		@state = null
-		@result = {}
-	
-		for key in @resultNames
-			@result[key] = @result[key] = new FutureResult(this, key)
-			
-		@config()
-			
-	config: ->
-		
-	submitted: (@server) ->
-		@executor ?= @server.defaultExecutor
-		
-		@dependencies = @explicitDependencies.slice(0)
-		for k, v of @inputs
-			if v instanceof FutureResult
-				@dependencies.push(v.job)
+  resultNames: []
+  pure: false
 
-		for dep in @dependencies
-			server.submit(dep)
-			dep.withId (job) => @emit 'dependencyAdded', job
+  constructor: (@executor, @inputs={}) ->
+    @explicitDependencies = []
+    @state = null
+    @result = {}
 
-			unless dep.settled()
-				dep.once 'settled', =>
-					@checkDeps()
+    for key in @resultNames
+      @result[key] = @result[key] = new FutureResult(this, key)
 
-		@saveState 'waiting'
-		@checkDeps()
-		
-	withId: (cb) ->
-		job = this
-		if @id?
-			setImmediate -> cb(job)
-		else
-			@once 'state', -> cb(job)
+    @config()
 
-	checkDeps: ->
-		unless @state is 'waiting'
-			throw new Error("checkDeps in state #{@state}")
+  config: ->
 
-		ready = true
-		for dep in @dependencies
-			switch dep.state
-				when 'error'
-					return @saveState 'error'
-				when 'abort'
-					return @saveState 'abort'
-				when 'success'
-					# nothing
-				else
-					ready = false
+  submitted: (@server) ->
+    @executor ?= @server.defaultExecutor
 
-		if ready
-			@emit 'inputsReady'
-			if @pure
-				@server.jobStore.resultByHash @hash(), (completion) =>
-					if completion
-						@result.fromCache = completion.id
-						{@result, @startTime, @endTime} = completion
-						@saveState(completion.status)
-					else
-						@enqueue()
-			else
-				@enqueue()
+    @dependencies = @explicitDependencies.slice(0)
+    for k, v of @inputs
+      if v instanceof FutureResult
+        @dependencies.push(v.job)
 
-	hash: ->
-		unless @pure
-			throw new Error("Can't hash impure job (pure jobs cannot depend on impure jobs)")
+    for dep in @dependencies
+      server.submit(dep)
+      dep.withId (job) => @emit 'dependencyAdded', job
 
-		unless @_hash
-			hasher = crypto.createHmac('sha256', JOB_HMAC_KEY)
-			hasher.update(@name)
+      unless dep.settled()
+        dep.once 'settled', =>
+          @checkDeps()
 
-			depHashes = (dep.hash() for dep in @explicitDependencies)
-			depHashes.sort()
-			hasher.update(hash) for hash in depHashes
+    @saveState 'waiting'
+    @checkDeps()
 
-			for key in Object.keys(@inputs).sort()
-				hasher.update(key)
-				hasher.update(":")
-				value = @inputs[key]
-				if value instanceof FutureResult
-					value = value.get()
+  withId: (cb) ->
+    job = this
+    if @id?
+      setImmediate -> cb(job)
+    else
+      @once 'state', -> cb(job)
 
-				if value instanceof Blob
-					hasher.update(value.hash)
-				else
-					hasher.update(JSON.stringify(value))
-				hasher.update(",")
+  checkDeps: ->
+    unless @state is 'waiting'
+      throw new Error("checkDeps in state #{@state}")
 
-			@_hash = hasher.digest()
+    ready = true
+    for dep in @dependencies
+      switch dep.state
+        when 'error'
+          return @saveState 'error'
+        when 'abort'
+          return @saveState 'abort'
+        when 'success'
+          # nothing
+        else
+          ready = false
 
-		@_hash
+    if ready
+      @emit 'inputsReady'
+      if @pure
+        @server.jobStore.resultByHash @hash(), (completion) =>
+          if completion
+            @result.fromCache = completion.id
+            {@result, @startTime, @endTime} = completion
+            @saveState(completion.status)
+          else
+            @enqueue()
+      else
+        @enqueue()
 
-	enqueue: (executor) ->
-		@executor ?= executor
-		@saveState 'pending'
-		@ctx = new Context(this)
-		@executor.enqueue(this)
+  hash: ->
+    unless @pure
+      throw new Error("Can't hash impure job (pure jobs cannot depend on impure jobs)")
 
-	saveState: (state) ->
-		if state not in STATES
-			throw new Error("Invalid status '#{state}'")
-		@state = state
-		@emit 'state', state
+    unless @_hash
+      hasher = crypto.createHmac('sha256', JOB_HMAC_KEY)
+      hasher.update(@name)
 
-		if @settled()
-			@emit 'settled'
+      depHashes = (dep.hash() for dep in @explicitDependencies)
+      depHashes.sort()
+      hasher.update(hash) for hash in depHashes
 
-	beforeRun: () ->
-		@startTime = new Date()
-		@saveState 'running'
-		
-	afterRun: (result) ->
-		@endTime = new Date()
-		@fromCache = false
+      for key in Object.keys(@inputs).sort()
+        hasher.update(key)
+        hasher.update(":")
+        value = @inputs[key]
+        if value instanceof FutureResult
+          value = value.get()
 
-		if @pure
-			@emit 'computed'
+        if value instanceof Blob
+          hasher.update(value.hash)
+        else
+          hasher.update(JSON.stringify(value))
+        hasher.update(",")
 
-		if result
-			@saveState('success')
-		else
-			@saveState('fail')
+      @_hash = hasher.digest()
 
-	name: ''
-	description: ''
+    @_hash
 
-	# Override this
-	run: (ctx) ->
-		ctx.write("Default exec!\n")
-		setImmediate( -> ctx.done(null) )
+  enqueue: (executor) ->
+    @executor ?= executor
+    @saveState 'pending'
+    @ctx = new Context(this)
+    @executor.enqueue(this)
+
+  saveState: (state) ->
+    if state not in STATES
+      throw new Error("Invalid status '#{state}'")
+    @state = state
+    @emit 'state', state
+
+    if @settled()
+      @emit 'settled'
+
+  beforeRun: () ->
+    @startTime = new Date()
+    @saveState 'running'
+
+  afterRun: (result) ->
+    @endTime = new Date()
+    @fromCache = false
+
+    if @pure
+      @emit 'computed'
+
+    if result
+      @saveState('success')
+    else
+      @saveState('fail')
+
+  name: ''
+  description: ''
+
+  # Override this
+  run: (ctx) ->
+    ctx.write("Default exec!\n")
+    setImmediate( -> ctx.done(null) )
 
 # An in-memory BlobStore
 @BlobStoreMem = class BlobStoreMem extends BlobStore
-	constructor: ->
-		@blobs = {}
+  constructor: ->
+    @blobs = {}
 
-	putBlob: (buffer, meta) ->
-		id = @hash(buffer)
-		if not @blobs[id]
-			@blobs[id] = buffer
-		new Blob(this, id, meta)
+  putBlob: (buffer, meta) ->
+    id = @hash(buffer)
+    if not @blobs[id]
+      @blobs[id] = buffer
+    new Blob(this, id, meta)
 
-	getBlob: (id, cb) ->
-		v = @blobs[id]
-		setImmediate ->
-			cb(v)
-		return
+  getBlob: (id, cb) ->
+    v = @blobs[id]
+    setImmediate ->
+      cb(v)
+    return
 
 # An Executor provides a Job a Context to access resources
 Context: class Context extends TeeStream
-	constructor: (@job)->
-		super()
-		@_completed = false
-		@queue = []
-		# Note: this needs to be piped somewhere by default so the Transform doesn't accumulate data.
-		# If not stdout, then a null sink, or some other way of fixing this.
-		@pipe(process.stdout)
-		
-	before: (cb) ->
-		setImmediate(cb)
-	
-	after: (cb) ->
-		setImmediate(cb)
-		
-	_doSeries: (cb) ->
-		async.series @queue, @_done
-		
-	_done: (err) =>
-		if err
-			@write("Failed with error: #{err.stack ? err}\n")
-			
-		if @_completed
-			console.trace("Job #{@job.constructor.name} completed multiple times")
-			return
-		@_completed = true
-			
-		@after (e) =>
-			throw e if e
-			@end()
-			@job.log = @log
-			@job.afterRun(!err)
-			
-	then: (fn) ->
-		@queue.push(fn)
-			
-	mixin: (obj) ->
-		for k, v of obj
-			this[k] = v
+  constructor: (@job)->
+    super()
+    @_completed = false
+    @queue = []
+    # Note: this needs to be piped somewhere by default so the Transform doesn't accumulate data.
+    # If not stdout, then a null sink, or some other way of fixing this.
+    @pipe(process.stdout)
+
+  before: (cb) ->
+    setImmediate(cb)
+
+  after: (cb) ->
+    setImmediate(cb)
+
+  _doSeries: (cb) ->
+    async.series @queue, @_done
+
+  _done: (err) =>
+    if err
+      @write("Failed with error: #{err.stack ? err}\n")
+
+    if @_completed
+      console.trace("Job #{@job.constructor.name} completed multiple times")
+      return
+    @_completed = true
+
+    @after (e) =>
+      throw e if e
+      @end()
+      @job.log = @log
+      @job.afterRun(!err)
+
+  then: (fn) ->
+    @queue.push(fn)
+
+  mixin: (obj) ->
+    for k, v of obj
+      this[k] = v
 
 # An Executor manages the execution of a set of jobs. May also wrap access to an execution resource
 @Executor = class Executor
-	enqueue: (job) ->
-		try
-			job.beforeRun()
-			job.run(job.ctx)
-			job.ctx._doSeries()
-		catch e
-			job.ctx._done(e)
+  enqueue: (job) ->
+    try
+      job.beforeRun()
+      job.run(job.ctx)
+      job.ctx._doSeries()
+    catch e
+      job.ctx._done(e)
 
 # An executor combinator that runs jobs one at a time in series on a specified executor
 @SeriesExecutor = class SeriesExecutor extends Executor
-	constructor: (@executor) ->
-		super()
-		@currentJob = null
-		@queue = []
+  constructor: (@executor) ->
+    super()
+    @currentJob = null
+    @queue = []
 
-	enqueue: (job) =>
-		@queue.push(job)
-		@shift() unless @currentJob
+  enqueue: (job) =>
+    @queue.push(job)
+    @shift() unless @currentJob
 
-	shift: =>
-			@currentJob = @queue.shift()
-			if @currentJob
-				@currentJob.on 'settled', @shift
-				@executor.enqueue(@currentJob)
+  shift: =>
+      @currentJob = @queue.shift()
+      if @currentJob
+        @currentJob.on 'settled', @shift
+        @executor.enqueue(@currentJob)
 
 @LocalExecutor = class LocalExecutor extends Executor
-	enqueue: (job) ->
-		ctx = job.ctx
-		temp.mkdir "jobserver-#{job.name}", (err, dir) =>
-			ctx.mixin @ctxMixin
-			ctx.dir = dir
-			ctx._cwd = dir
-			ctx._env ?= {}
-			ctx.envImmediate(process.env)
-			ctx.write("Working directory: #{dir}\n")
-			
-			ctx.on 'end', =>
-				rimraf dir, ->
-				
-			Executor::enqueue.call(this, job)
-	
-	ctxMixin:
-		envImmediate: (e) ->
-			for k, v of e
-				@_env[k] = v
-			null
+  enqueue: (job) ->
+    ctx = job.ctx
+    temp.mkdir "jobserver-#{job.name}", (err, dir) =>
+      ctx.mixin @ctxMixin
+      ctx.dir = dir
+      ctx._cwd = dir
+      ctx._env ?= {}
+      ctx.envImmediate(process.env)
+      ctx.write("Working directory: #{dir}\n")
 
-		env: (e) ->
-			@then (cb) =>
-				@envImmediate(e)
-				cb()
+      ctx.on 'end', =>
+        rimraf dir, ->
 
-		cd: (p) ->
-			@then (cb) =>
-				@_cwd = path.resolve(@_cwd, p)
-				cb()
+      Executor::enqueue.call(this, job)
 
-		run: (command, args) ->
-			@then (cb) =>
-				unless util.isArray(args)
-					args = ['-c', command]
-					command = 'sh'
+  ctxMixin:
+    envImmediate: (e) ->
+      for k, v of e
+        @_env[k] = v
+      null
 
-				@write("$ #{command + if args then ' ' + args.join(' ') else ''}\n")
-				p = child_process.spawn command, args, {cwd: @_cwd, env: @_env}
-				p.stdout.pipe(this, {end: false})
-				p.stderr.pipe(this, {end: false})
-				p.on 'close', (code) =>
-					cb(if code != 0 then "Exited with #{code}")
-					
-		put: (content, filename) ->
-			@then (cb) =>
-				content.getBuffer (data) =>
-					@write("#{data.length} bytes to #{path.resolve(@_cwd, filename)}\n")
-					fs.writeFile path.resolve(@_cwd, filename), data, cb
-			
-		get: (output, filename) ->
-			@then (cb) =>
-				fs.readFile path.resolve(@_cwd, filename), (err, data) =>
-					return cb(err) if err
-					@job.result[output] = @job.server.blobStore.putBlob(data, {name: output})
-					console.log("#{data.length} bytes from #{path.resolve(@_cwd, filename)} as #{output} on #{@job.id}:", @job.result[output])
-					cb()
-			
-		git_clone: (repo, branch, dir) ->
-			@run('git', ['clone', '--depth=1', '-b', branch, '--', repo, dir])
+    env: (e) ->
+      @then (cb) =>
+        @envImmediate(e)
+        cb()
 
+    cd: (p) ->
+      @then (cb) =>
+        @_cwd = path.resolve(@_cwd, p)
+        cb()
+
+    run: (command, args) ->
+      @then (cb) =>
+        unless util.isArray(args)
+          args = ['-c', command]
+          command = 'sh'
+
+        @write("$ #{command + if args then ' ' + args.join(' ') else ''}\n")
+        p = child_process.spawn command, args, {cwd: @_cwd, env: @_env}
+        p.stdout.pipe(this, {end: false})
+        p.stderr.pipe(this, {end: false})
+        p.on 'close', (code) =>
+          cb(if code != 0 then "Exited with #{code}")
+
+    put: (content, filename) ->
+      @then (cb) =>
+        content.getBuffer (data) =>
+          @write("#{data.length} bytes to #{path.resolve(@_cwd, filename)}\n")
+          fs.writeFile path.resolve(@_cwd, filename), data, cb
+
+    get: (output, filename) ->
+      @then (cb) =>
+        fs.readFile path.resolve(@_cwd, filename), (err, data) =>
+          return cb(err) if err
+          @job.result[output] = @job.server.blobStore.putBlob(data, {name: output})
+          console.log("#{data.length} bytes from #{path.resolve(@_cwd, filename)} as #{output} on #{@job.id}:", @job.result[output])
+          cb()
+
+    git_clone: (repo, branch, dir) ->
+      @run('git', ['clone', '--depth=1', '-b', branch, '--', repo, dir])

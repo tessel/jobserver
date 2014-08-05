@@ -19,10 +19,10 @@ testBlobStore = (constr) ->
     b1 = s.putBlob(data)
     b2 = s.putBlob(data)
     assert.equal(b1.id, b2.id)
-    
+
 describe 'BlobStoreMem', ->
   testBlobStore -> new jobserver.BlobStoreMem()
 
-temp.mkdir "jobserver-test", (err, dir) =>  
-  describe 'BlobStoreLocal', ->    
+temp.mkdir "jobserver-test", (err, dir) =>
+  describe 'BlobStoreLocal', ->
     testBlobStore -> new BlobStoreLocal(dir)

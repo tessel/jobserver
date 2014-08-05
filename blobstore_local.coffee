@@ -6,7 +6,7 @@ mkdirp = require 'mkdirp'
 module.exports = class BlobStoreLocal extends BlobStore
 	constructor: (@localStorePath) ->
     mkdirp.sync(@localStorePath)
-    
+
   path: (id) ->
     folder = path.join(@localStorePath, id.slice(0,2))
     mkdirp.sync(folder)

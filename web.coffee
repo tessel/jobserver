@@ -7,7 +7,7 @@ class SSEStream extends Transform
     s = 'data: ' + JSON.stringify(chunk.toString('utf8')) + '\r\n\r\n'
     this.push(s)
     callback()
-    
+
   _flush: (callback) ->
     this.push("event: end\ndata: null\n\n")
     callback()
@@ -40,7 +40,7 @@ module.exports = web = (server) ->
     server.job req.params.id, (job) ->
       unless job
         return res.status(404).end("Not found")
-      
+
       res.format
         'application/json': ->
           res.send(job.jsonableState())
@@ -55,7 +55,7 @@ module.exports = web = (server) ->
     server.job req.params.id, (job) ->
       unless job?.ctx
         return res.status(404).end("Not found")
-      
+
       res.format
         'text/plain': ->
           res.send(job.ctx.log)

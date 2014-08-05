@@ -4,98 +4,98 @@ _.extend(app, Backbone.Events)
 logparse = require('./logparse')
 
 class JobModel extends Backbone.Model
-	logs: ->
-		console.log ("/jobs/#{@id}/logs")
-		new EventSource("/jobs/#{@id}/log")
+  logs: ->
+    console.log ("/jobs/#{@id}/logs")
+    new EventSource("/jobs/#{@id}/log")
 
 class JobCollection extends Backbone.Collection
-	model: JobModel
+  model: JobModel
 
 class ListView extends Backbone.View
-	el: '#list'
+  el: '#list'
 
-	initialize: ->
-		@listenTo app.jobs, 'add', this.addOne
-		@listenTo app.jobs, 'reset', this.addAll
+  initialize: ->
+    @listenTo app.jobs, 'add', this.addOne
+    @listenTo app.jobs, 'reset', this.addAll
 
-	addAll: ->
-		@$el.empty()
-		app.jobs.each (job) => @addOne(job)
+  addAll: ->
+    @$el.empty()
+    app.jobs.each (job) => @addOne(job)
 
-	addOne: (job) ->
-		view = new JobTile { model: job }
-		@$el.append view.render()
+  addOne: (job) ->
+    view = new JobTile { model: job }
+    @$el.append view.render()
 
 class JobTile extends Backbone.View
-	initialize: ->
-		@listenTo @model, 'change', this.render
-		@listenTo @model, 'destroy', this.remove
+  initialize: ->
+    @listenTo @model, 'change', this.render
+    @listenTo @model, 'destroy', this.remove
 
-	render: ->
-		@$el.attr('data-status', @model.get 'state')
-		unless @$header
-			@$el.empty().addClass('job')
-			@$header = $("<header>").appendTo(@$el)
-			@$title = $("<h1>").text(@model.get('description') or @model.get('name')).appendTo(@$header)
-			
-			@$el.click =>
-				app.selectJob(@model)
+  render: ->
+    @$el.attr('data-status', @model.get 'state')
+    unless @$header
+      @$el.empty().addClass('job')
+      @$header = $("<header>").appendTo(@$el)
+      @$title = $("<h1>").text(@model.get('description') or @model.get('name')).appendTo(@$header)
 
-		if @model.get('settled')
-			setTimeout (=> @$el.slideUp(500, => @remove())), 4000
+      @$el.click =>
+        app.selectJob(@model)
 
-		@$el
+    if @model.get('settled')
+      setTimeout (=> @$el.slideUp(500, => @remove())), 4000
+
+    @$el
 
 app.selectJob = (job) ->
-	app.selectedJob = job
-	app.trigger('selectedJob', job)
+  app.selectedJob = job
+  app.trigger('selectedJob', job)
 
 class JobSidebar extends Backbone.View
-	initialize: ->
-		@listenTo app, 'selectedJob', @render
-		@logs = null
-		
-	render: ->
-		@$('#title').empty().append(app.selectedJob.get 'description')
-		@logs.close() if @logs
-		@logs = app.selectedJob.logs()
-		@logs.addEventListener 'open', =>
-			console.log('open log')
-			@logparse = new logparse(@$('#log')[0])
-		@logs.addEventListener 'message', (e) =>
-			@logparse.push(JSON.parse(e.data))
-		@logs.addEventListener 'error', (e) ->
-			console.log('error', e)
-		@logs.addEventListener 'end', (e) =>
-			console.log("stream end")
-			@logs.close()
+  initialize: ->
+    @listenTo app, 'selectedJob', @render
+    @logs = null
+
+  render: ->
+    @$('#title').empty().append(app.selectedJob.get 'description')
+    @logs.close() if @logs
+    @logs = app.selectedJob.logs()
+    @logs.addEventListener 'open', =>
+      console.log('open log')
+      @logparse = new logparse(@$('#log')[0])
+    @logs.addEventListener 'message', (e) =>
+      @logparse.push(JSON.parse(e.data))
+    @logs.addEventListener 'error', (e) ->
+      console.log('error', e)
+    @logs.addEventListener 'end', (e) =>
+      console.log("stream end")
+      @logs.close()
 
 connect = ->
-	app.eventsource = new EventSource('/jobs')
+  app.eventsource = new EventSource('/jobs')
 
-	app.eventsource.addEventListener 'open', ->
-		console.log('open')
+  app.eventsource.addEventListener 'open', ->
+    console.log('open')
 
-	app.eventsource.addEventListener 'close', ->
-		console.log('close')
+  app.eventsource.addEventListener 'close', ->
+    console.log('close')
 
-	app.eventsource.addEventListener 'error', (e) ->
-		console.log('error', e)
+  app.eventsource.addEventListener 'error', (e) ->
+    console.log('error', e)
 
-	listen = (type, cb) ->
-		app.eventsource.addEventListener type, (e) ->
-			cb(JSON.parse(e.data))
+  listen = (type, cb) ->
+    app.eventsource.addEventListener type, (e) ->
+      cb(JSON.parse(e.data))
 
-	listen 'hello', (m) ->
-		app.jobs.reset(m.jobs)
+  listen 'hello', (m) ->
+    app.jobs.reset(m.jobs)
 
-	listen 'job', (m) ->
-		app.jobs.add(m, {merge: true})
-		
-	sidebar = new JobSidebar({el: '#info'})
+  listen 'job', (m) ->
+    app.jobs.add(m, {merge: true})
+
+  sidebar = new JobSidebar({el: '#info'})
 
 $().ready ->
-	app.jobs = new JobCollection()
-	app.list = new ListView()
+  app.jobs = new JobCollection()
+  app.list = new ListView()
 
-	connect()
+  connect()

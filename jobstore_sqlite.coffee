@@ -110,4 +110,3 @@ module.exports = class JobStoreSQLite extends JobStore
 
   addInputs: (job) ->
   addOutputs: (job) ->
-

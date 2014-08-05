@@ -2,13 +2,13 @@ module.exports = class LogParse
   constructor: (@elem) ->
     @elem.innerHTML = ''
     @beginLine()
-    
+
     @state = 'text'
     @chunk = ''
     @control = ''
-    
+
     @foldDepth = 0
-    
+
     @ansi = {
       foreground: null
       background: null
@@ -16,13 +16,13 @@ module.exports = class LogParse
       italic: false
       underline: false
     }
-    
+
   beginLine: ->
     @pre = document.createElement('pre')
     @line = document.createElement('div')
     @line.appendChild(@pre)
     @appended = false
-    
+
   push: (s) ->
     for c in s
       switch @state
@@ -60,14 +60,14 @@ module.exports = class LogParse
               @control = ''
               @state = 'text'
             when '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', ';'
-              @control += c  
+              @control += c
             else
               # ignore unknown command
               @state = 'text'
-      
+
     @endSpan()
     @flushLine()
-          
+
   ansiStyle: (code) ->
     if foregroundColors[code]
       @ansi.foreground = foregroundColors[code]
@@ -81,40 +81,40 @@ module.exports = class LogParse
     else if code == '23' then @ansi.italic = false
     else if code == '4'  then @ansi.underline = true
     else if code == '24' then @ansi.underline = false
-      
+
   endSpan: ->
     unless @chunk.length
       return
-    
+
     if @replaceLine
       @pre.innerHTML = ''
       @replaceLine = false
-    
+
     classes = []
     classes.push(@ansi.foreground) if @ansi.foreground
     classes.push('bg-'+ @ansi.background) if @ansi.background
     classes.push('bold') if @ansi.bold
     classes.push('italic') if @ansi.italic
-    
+
     node = text = document.createTextNode(@chunk)
     if classes.length
       node = document.createElement('span')
       node.className = classes.join(' ')
       node.appendChild(text)
     @pre.appendChild(node)
-    
+
     @chunk = ''
-    
+
   endLine: ->
     @flushLine()
     @beginLine()
-    
+
   flushLine: ->
     unless @appended
       @elem.appendChild @line
       @appended = true
-        
-      
+
+
 foregroundColors =
   '30': 'black',
   '31': 'red',
@@ -136,4 +136,3 @@ backgroundColors =
   '45': 'magenta',
   '46': 'cyan',
   '47': 'white'
-
