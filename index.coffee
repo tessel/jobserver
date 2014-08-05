@@ -188,8 +188,8 @@ class TeeStream extends Transform
 		if ready
 			if @pure
 				@server.jobStore.resultByHash @hash(), (completion) =>
-					if result
-						@result.fromCache = completion.id or true
+					if completion
+						@result.fromCache = completion.id
 						{@result, @startTime, @endTime} = completion
 						@saveState(completion.status)
 					else
