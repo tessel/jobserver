@@ -87,21 +87,19 @@ module.exports = web = (server) ->
 
   app.get '/jobs/:id/log', (req, res) ->
     server.job req.params.id, (job) ->
-      unless job?.ctx
+      unless job
         return res.status(404).end("Not found")
 
       res.format
         'text/plain': ->
-          res.send(job.ctx.log)
+          server.pipeLogStream(job, res)
 
         'text/event-stream': ->
           serverEvent(req, res)
           s = new SSEStream()
-          job.ctx.pipeAll(s)
+          server.pipeLogStream(job, s)
           s.pipe(res)
-
-          res.on 'close', ->
-            job.ctx.unpipe(s)
+          res.on 'close', -> s.emit 'close'
 
   app
 

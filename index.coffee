@@ -64,6 +64,22 @@ STATES = [
     else
       @jobStore.getJob(id, cb)
 
+  pipeLogStream: (job, dest) ->
+    if job instanceof Job
+      pipe = ->
+        dest.write(job.ctx.log)
+        job.ctx.pipe(dest)
+        dest.on 'close', -> job.ctx.unpipe(dest)
+      if job.ctx
+        pipe()
+      else
+        job.on 'started', pipe
+        dest.on 'close', -> job.removeListener 'started', pipe
+    else
+      @blobStore.getBlob job.logBlob, (blob) ->
+        dest.end(blob or '')
+
+
   relatedJobs: (id, cb) ->
     id = parseInt(id, 10)
     @jobStore.getRelatedJobs(id, cb)
@@ -108,10 +124,6 @@ class TeeStream extends Transform
   constructor: ->
     super()
     @log = ''
-
-  pipeAll: (o) ->
-    o.write(@log)
-    @pipe(o)
 
   _transform: (chunk, encoding, callback) ->
     @log += chunk.toString('utf8')
@@ -231,6 +243,7 @@ class TeeStream extends Transform
     @saveState 'pending'
     @ctx = new Context(this)
     @executor.enqueue(this)
+    @emit 'started'
 
   saveState: (state) ->
     if state not in STATES
@@ -248,6 +261,9 @@ class TeeStream extends Transform
   afterRun: (result) ->
     @endTime = new Date()
     @fromCache = false
+
+    if @server
+      @logBlob = @server.blobStore.putBlob(@ctx.log, {from: 'log', jobId: @id})
 
     if @pure
       @emit 'computed'
@@ -405,7 +421,7 @@ Context: class Context extends TeeStream
       @then (cb) =>
         fs.readFile path.resolve(@_cwd, filename), (err, data) =>
           return cb(err) if err
-          @job.result[output] = @job.server.blobStore.putBlob(data, {name: output})
+          @job.result[output] = @job.server.blobStore.putBlob(data, {from: 'file', jobId: @job.id, name: output})
           console.log("#{data.length} bytes from #{path.resolve(@_cwd, filename)} as #{output} on #{@job.id}:", @job.result[output])
           cb()
 
