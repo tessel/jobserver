@@ -1,83 +1,84 @@
 assert = require 'assert'
 jobserver = require '../index'
 
-# Takes a list of names and returns an object with methods with those names, which must be called in order
-orderingSpy = (events) ->
-	r = {}
-	counter = 0
-
-	events.forEach (name) ->
-		r[name] = ->
-			if events[counter] == name
-				counter++
-			else
-				throw new Error("`#{name}` called in the wrong order (expected `#{events[counter]}` next)")
-
-	return r
-
-describe 'orderingSpy', ->
-	it 'passes', ->
-		o = orderingSpy(['a', 'b', 'c', 'c', 'd'])
-		o.a()
-		o.b()
-		o.c()
-		o.c()
-		o.d()
-
-	it 'fails', ->
-		o = orderingSpy(['a', 'b', 'c', 'd'])
-		assert.throws ->
-			o.a()
-			o.b()
-			o.d()
-			o.c()
-
 class TestJob extends jobserver.Job
 	constructor: (@run) ->
 		super()
 
+class OrderingJob extends jobserver.Job
+	counter = 1
+	run: (ctx) ->
+		this.startTick = counter++
+		ctx.then (c) =>
+			setTimeout (=>
+				this.endTick = counter++
+				c()
+			), 1
+
+	assertRanAfter: (job) ->
+		assert job.startTick and job.endTick, "other job did not run"
+		assert @startTick and @endTick, "this job did not run"
+		assert job.endTick < @startTick
+
 describe 'Job', ->
 	jobstore = blobstore = server = null
 
-	beforeEach ->
+	before ->
 		server = new jobserver.Server()
 		server.defaultExecutor = new jobserver.Executor()
 
-	it 'Runs and emits states and collects a log', (cb) ->
-		ordered = orderingSpy(['waiting', 'pending', 'running', 'exec', 'success', 'settled'])
-		job = new TestJob (ctx, cb) ->
-			ordered.exec()
-			ctx.write("test1\n")
-			ctx.write("test2\n")
+	describe 'Running a job', (cb) ->
+		job = null
+		order = []
 
-		job.on 'state', (s) ->
-			ordered[s]()
+		before (done) ->
+			job = new TestJob (ctx, cb) ->
+				order.push('exec')
+				ctx.write("test1\n")
+				ctx.write("test2\n")
 
-		job.on 'settled', ->
-			ordered.settled()
+			job.on 'state', (s) ->
+				order.push(s)
+
+			job.on 'settled', done
+			server.submit(job)
+
+		it 'emits states', ->
+			assert.deepEqual order, ['waiting', 'pending', 'running', 'exec', 'success']
+
+		it 'collects a log', ->
 			assert.equal(job.log, 'test1\ntest2\n')
-			cb()
 
-		server.submit(job)
+	describe 'Running dependent jobs', (done) ->
+		jobs = []
+		before (done) ->
+			makeJob = (deps...) ->
+				j = new OrderingJob()
+				j.explicitDependencies.push(deps...)
+				j
 
-	it 'Runs dependencies in order', (done) ->
-		ordered = orderingSpy(['prestart', 'depstart', 'depstart' , 'parentstart'])
+			#          1
+			#  5 - 3 <   > 0
+			#   \      2
+			#    4
 
-		job0 = new TestJob (ctx) ->
-			ordered.prestart()
-		job1 = new TestJob (ctx) ->
-			ordered.depstart()
-		job2 = new TestJob (ctx) ->
-			ordered.depstart()
-		job3 = new TestJob (ctx) ->
-			ordered.parentstart()
+			jobs[0] = makeJob()
+			jobs[1] = makeJob(jobs[0])
+			jobs[2] = makeJob(jobs[0])
+			jobs[3] = makeJob(jobs[1], jobs[2])
+			jobs[4] = makeJob()
+			jobs[5] = makeJob(jobs[4], jobs[3])
 
-		job1.explicitDependencies.push(job0)
-		job2.explicitDependencies.push(job0)
-		job3.explicitDependencies.push(job1, job2)
+			server.submit jobs[5], ->
+				done()
 
-		server.submit job3, ->
-			done()
+		it 'runs dependencies before dependants', ->
+			jobs[1].assertRanAfter(jobs[0])
+			jobs[2].assertRanAfter(jobs[0])
+			jobs[3].assertRanAfter(jobs[1])
+			jobs[3].assertRanAfter(jobs[2])
+			jobs[5].assertRanAfter(jobs[3])
+			jobs[5].assertRanAfter(jobs[4])
 
 	it 'Generates implicit dependencies based on input'
 	it 'Rejects dependency cycles'
@@ -89,28 +90,13 @@ describe 'SeriesExecutor', ->
 		beforeEach ->
 			e = new jobserver.SeriesExecutor(new jobserver.Executor())
 
-		it 'Runs jobs in order', (cb) ->
-			spy = new orderingSpy(['j1_start', 'j1', 'j2', 'j3_start', 'j3'])
-			j1 = new TestJob (ctx) ->
-				spy.j1_start()
-				ctx.then (cb) ->
-					spy.j1()
-					setTimeout(cb, 20)
-
-			j2 = new TestJob (ctx) ->
-				spy.j2()
-
-			j3 = new TestJob (ctx) ->
-				spy.j3_start()
-				ctx.then (cb) ->
-					spy.j3()
-					cb(new Error("test failure (should fail)"))
-
-			j1.enqueue(e)
-			j2.enqueue(e)
-			j3.enqueue(e)
-			
-			j3.on 'settled', -> cb()
+		it 'Runs jobs in order', (done) ->
+			jobs = (new OrderingJob() for i in [0...3])
+			j.enqueue(e) for j in jobs
+			jobs[jobs.length-1].on 'settled', ->
+				for i in [1...3]
+					jobs[i].assertRanAfter(jobs[i-1])
+				done()
 			
 describe 'LocalExecutor', ->
 		server = null
@@ -121,20 +107,22 @@ describe 'LocalExecutor', ->
 			e = new jobserver.LocalExecutor()
 			
 		it 'Runs subtasks with a queue', (cb) ->
+			order = []
 			j = new TestJob (ctx) ->
-				spy = new orderingSpy(['a', 'b', 'c'])
 				assert(ctx.dir)
 				ctx.then (n) ->
-					spy.a()
+					order.push 'a'
 					n()
 				ctx.then (n) ->
-					spy.b()
+					order.push 'b'
 					setTimeout(n, 10)
-					ctx.then (n) ->
-						spy.c()
-						n()
+				ctx.then (n) ->
+					order.push 'c'
+					n()
 			j.enqueue(e)
-			j.on 'settled', -> cb()
+			j.on 'settled', ->
+				assert.deepEqual order, ['a', 'b', 'c']
+				cb()
 			
 		it 'Runs commands', (cb) ->
 			j = new TestJob (ctx) ->
