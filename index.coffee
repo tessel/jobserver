@@ -62,6 +62,9 @@ STATES = [
 			setImmediate -> cb(job)
 		else
 			@jobStore.getJob(id, cb)
+			
+	relatedJobs: (id, cb) ->
+		@jobStore.getRelatedJobs(id, cb)
 
 	jsonableState: ->
 		jobs = for id, job of @activeJobs when not job.settled()
@@ -150,6 +153,7 @@ class TeeStream extends Transform
 
 		for dep in @dependencies
 			server.submit(dep)
+			dep.withId (job) => @emit 'dependencyAdded', job
 
 			unless dep.settled()
 				dep.once 'settled', =>
@@ -157,6 +161,13 @@ class TeeStream extends Transform
 
 		@saveState 'waiting'
 		@checkDeps()
+		
+	withId: (cb) ->
+		job = this
+		if @id?
+			setImmediate -> cb(job)
+		else
+			@once 'state', -> cb(job)
 
 	checkDeps: ->
 		unless @state is 'waiting'

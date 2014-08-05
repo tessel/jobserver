@@ -28,10 +28,15 @@ module.exports = class JobStoreSQLite extends JobStore
       @db.run "CREATE UNIQUE INDEX jobs_hash ON jobs (hash);"
       @db.run "CREATE TABLE jobs_closure (
         parent,
-        child
+        child,
+        depth
       );"
       @db.run "CREATE INDEX jobs_closure_parent on jobs_closure (parent);"
       @db.run "CREATE INDEX jobs_closure_child on jobs_closure (child);"
+      @db.run "CREATE TRIGGER jobs_closure_selfref AFTER INSERT ON jobs
+                FOR EACH ROW BEGIN
+                 INSERT INTO jobs_closure (parent, child, depth) VALUES (new.id, new.id, 0);
+                END;"
       @db.run "CREATE TABLE inputs (
         jobId,
         name,
@@ -60,6 +65,8 @@ module.exports = class JobStoreSQLite extends JobStore
     job.on 'state', =>
       @updateJob(job)
     
+    job.on 'dependencyAdded', (dependency) =>
+      @addDependency(job, dependency)
   jobFromRow: (row) ->
     return null unless row
     j = new JobInfo()
@@ -78,4 +85,18 @@ module.exports = class JobStoreSQLite extends JobStore
     @db.run "UPDATE jobs SET state=?, startTime=?,   endTime=?,  logBlob=? WHERE id=?",
                          [job.state, job.startTime, job.endTime,
                          job.logBlob?.id, job.id]
+  
+  addDependency: (job, dep) ->
+    @db.run "INSERT INTO jobs_closure (parent, child, depth)
+               SELECT p.parent, c.child, p.depth+c.depth+1
+               FROM jobs_closure p, jobs_closure c
+               WHERE p.child=? AND c.parent=?", [job.id, dep.id]
+               
+  getRelatedJobs: (id, cb) ->
+    @db.all "SELECT id, #{jobCols.join(',')} FROM jobs WHERE id IN (
+              SELECT child  FROM jobs_closure WHERE parent=? UNION ALL
+              SELECT parent FROM jobs_closure WHERE child=?);", [id, id], (err, rows) =>
+      console.error(err) if err
+      return cb(null) unless rows
+      cb(@jobFromRow(row) for row in rows)
       
