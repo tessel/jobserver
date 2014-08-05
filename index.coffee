@@ -36,6 +36,12 @@ STATES = [
 
 	submit: (job, doneCb) ->
 		server = this
+
+		if job.alreadySubmitted
+			if doneCb
+				job.once 'settled', doneCb
+			return
+		job.alreadySubmitted = true
 		
 		@jobStore.addJob job, =>
 			@activeJobs[job.id] = job
@@ -143,8 +149,7 @@ class TeeStream extends Transform
 				@dependencies.push(v.job)
 
 		for dep in @dependencies
-			if not dep.state?
-				server.submit(dep)
+			server.submit(dep)
 
 			unless dep.settled()
 				dep.once 'settled', =>
