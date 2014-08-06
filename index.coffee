@@ -29,6 +29,7 @@ STATES = [
     unless @jobStore
       JobStoreSQLite = require('./jobstore_sqlite')
       @jobStore = new JobStoreSQLite(':memory:')
+    @defaultExecutor = new Executor()
 
     @activeJobs = {}
 
