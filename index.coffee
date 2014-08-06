@@ -343,6 +343,13 @@ Context: class Context extends TeeStream
   then: (fn) ->
     @queue.push(fn)
 
+  runJob: (child) ->
+    parent = @job
+    @then (cb) ->
+      parent.server.submit(child, cb)
+      child.withId ->
+        parent.emit 'dependencyAdded', child
+
   mixin: (obj) ->
     for k, v of obj
       this[k] = v

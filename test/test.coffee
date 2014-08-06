@@ -108,6 +108,25 @@ describe 'Job', ->
       assert.equal j2.state, 'fail'
       done()
 
+  it 'Can run a job as a step of another', (done) ->
+    order = []
+    j1 = new TestJob (ctx) ->
+      ctx.then (cb) ->
+        order.push 'before'
+        cb()
+      ctx.runJob new TestJob (ctx) ->
+        order.push 'sub'
+      ctx.then (cb) ->
+        order.push 'after'
+        cb()
+    server.submit j1, ->
+      assert.equal j1.state, 'success'
+      assert.deepEqual order, ['before', 'sub', 'after']
+
+      server.relatedJobs j1.id, (l) ->
+        assert.equal l.length, 2
+        done()
+
   it 'Generates implicit dependencies based on input'
   it 'Rejects dependency cycles'
   it 'Hashes consistently'
