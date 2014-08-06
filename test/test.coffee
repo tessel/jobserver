@@ -98,8 +98,11 @@ describe 'Job', ->
   it 'Fails if dependencies fail', (done) ->
     j1 = new TestJob (ctx) ->
       ctx.then (cb) -> cb("testErr")
+    j3 = new TestJob (ctx) ->
+      ctx.then (cb) -> setTimeout(cb, 1)
     j2 = new TestJob (ctx) ->
     j2.explicitDependencies.push(j1)
+    j2.explicitDependencies.push(j3)
     server.submit j2, ->
       assert.equal j1.state, 'fail'
       assert.equal j2.state, 'fail'

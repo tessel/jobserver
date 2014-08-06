@@ -184,6 +184,10 @@ class TeeStream extends Transform
       @once 'state', -> cb(job)
 
   checkDeps: ->
+    if @state in ['fail', 'abort']
+      # already settled; nothing to do
+      return
+
     unless @state is 'waiting'
       throw new Error("checkDeps in state #{@state}")
 
