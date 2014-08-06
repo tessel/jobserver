@@ -420,8 +420,7 @@ Context: class Context extends TeeStream
       @then (cb) =>
         fs.readFile path.resolve(@_cwd, filename), (err, data) =>
           return cb(err) if err
-          @job.result[output] = @job.server.blobStore.putBlob(data, {from: 'file', jobId: @job.id, name: output})
-          cb()
+          @job.result[output] = @job.server.blobStore.putBlob(data, {from: 'file', jobId: @job.id, name: output}, cb)
 
     git_clone: (repo, branch, dir) ->
       @run('git', ['clone', '--depth=1', '-b', branch, '--', repo, dir])
