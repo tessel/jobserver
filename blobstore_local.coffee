@@ -1,10 +1,11 @@
 fs = require 'fs'
+zlib = require 'zlib'
 path = require 'path'
 mkdirp = require 'mkdirp'
 {BlobStore, Blob} = require './index'
 
 module.exports = class BlobStoreLocal extends BlobStore
-	constructor: (@localStorePath) ->
+  constructor: (@localStorePath) ->
     mkdirp.sync(@localStorePath)
 
   path: (id) ->
@@ -15,13 +16,19 @@ module.exports = class BlobStoreLocal extends BlobStore
   putBlob: (buffer, meta, cb) ->
     # writes buffer to local filesystem
     id = @hash(buffer)
+    p = @path(id)
 
-    fs.writeFile(@path(id)+'.json', JSON.stringify(meta))
-    fs.writeFile(@path(id), buffer, cb)
+    fs.writeFile("#{p}.json", JSON.stringify(meta))
+    zlib.gzip buffer, (err, b) ->
+      throw err if err
+      fs.writeFile("#{p}.gz", b, cb)
+
     new Blob(this, id, meta)
 
 
   getBlob: (id, cb) ->
-    fs.readFile @path(id), (err, data) ->
+    fs.readFile "#{@path(id)}.gz", (err, data) ->
       throw err if err
-      cb(data)
+      zlib.gunzip data, (err, data) ->
+        throw err if err
+        cb(data)

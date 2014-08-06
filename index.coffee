@@ -10,9 +10,7 @@ path = require 'path'
 fs = require 'fs'
 async = require 'async'
 
-
-BLOB_HMAC_KEY = 'adb97d77011182f0b6884f7a6d32280a'
-JOB_HMAC_KEY  = 'fb49246c50d78d460a5d666e943230fa'
+hashDigest = (hash) -> hash.toString('base64').replace(/\=/g, '').replace(/\//g, '-')
 
 STATES = [
   'waiting'   # depends on outputs of other jobs that have not finished yet
@@ -107,7 +105,7 @@ STATES = [
   getBlob: (id, cb) ->
     throw new Error("Abstract method")
   hash: (buffer) ->
-    crypto.createHmac('sha256', BLOB_HMAC_KEY).update(buffer).digest().toString('base64')
+    hashDigest(crypto.createHash('sha256').update(buffer).digest())
 
 # An item in a BlobStore
 @Blob = class Blob
@@ -214,7 +212,7 @@ class TeeStream extends Transform
       throw new Error("Can't hash impure job (pure jobs cannot depend on impure jobs)")
 
     unless @_hash
-      hasher = crypto.createHmac('sha256', JOB_HMAC_KEY)
+      hasher = crypto.createHash('sha256')
       hasher.update(@name)
 
       depHashes = (dep.hash() for dep in @explicitDependencies)
@@ -234,7 +232,7 @@ class TeeStream extends Transform
           hasher.update(JSON.stringify(value))
         hasher.update(",")
 
-      @_hash = hasher.digest()
+      @_hash = hashDigest(hasher.digest())
 
     @_hash
 
@@ -286,10 +284,11 @@ class TeeStream extends Transform
   constructor: ->
     @blobs = {}
 
-  putBlob: (buffer, meta) ->
+  putBlob: (buffer, meta, cb) ->
     id = @hash(buffer)
     if not @blobs[id]
       @blobs[id] = buffer
+    setImmediate(cb)
     new Blob(this, id, meta)
 
   getBlob: (id, cb) ->

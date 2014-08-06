@@ -8,10 +8,10 @@ testBlobStore = (constr) ->
   it 'stores and retrieves blobs', (next) ->
     s = constr()
     data = new Buffer('asdfghjkl')
-    b1 = s.putBlob(data)
-    s.getBlob b1.id, (resultData) ->
-      assert.equal(data.toString('hex'), resultData.toString('hex'))
-      next()
+    b1 = s.putBlob data, {}, ->
+      s.getBlob b1.id, (resultData) ->
+        assert.equal(data.toString('hex'), resultData.toString('hex'))
+        next()
 
   it 'hashes identical blobs to the same id', ->
     s = constr()
