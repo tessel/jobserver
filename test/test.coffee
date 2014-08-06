@@ -33,7 +33,7 @@ describe 'Job', ->
     order = []
 
     before (done) ->
-      job = new TestJob (ctx, cb) ->
+      job = new TestJob (ctx) ->
         order.push('exec')
         ctx.write("test1\n")
         ctx.write("test2\n")
@@ -94,6 +94,16 @@ describe 'Job', ->
 
     it 'persists children and parents of middle jobs to the database', (done) ->
       checkRelated 2, [0, 2, 3, 5], done
+
+  it 'Fails if dependencies fail', (done) ->
+    j1 = new TestJob (ctx) ->
+      ctx.then (cb) -> cb("testErr")
+    j2 = new TestJob (ctx) ->
+    j2.explicitDependencies.push(j1)
+    server.submit j2, ->
+      assert.equal j1.state, 'fail'
+      assert.equal j2.state, 'fail'
+      done()
 
   it 'Generates implicit dependencies based on input'
   it 'Rejects dependency cycles'
