@@ -77,6 +77,7 @@ STATES = [
         job.on 'started', pipe
         dest.on 'close', -> job.removeListener 'started', pipe
     else
+      return dest.end('') unless job.logBlob
       @blobStore.getBlob job.logBlob, (blob) ->
         dest.end(blob or '')
 
