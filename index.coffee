@@ -421,7 +421,6 @@ Context: class Context extends TeeStream
         fs.readFile path.resolve(@_cwd, filename), (err, data) =>
           return cb(err) if err
           @job.result[output] = @job.server.blobStore.putBlob(data, {from: 'file', jobId: @job.id, name: output})
-          console.log("#{data.length} bytes from #{path.resolve(@_cwd, filename)} as #{output} on #{@job.id}:", @job.result[output])
           cb()
 
     git_clone: (repo, branch, dir) ->

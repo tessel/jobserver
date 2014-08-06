@@ -50,7 +50,6 @@ module.exports = web = (server) ->
       res.sse('job', msg)
 
   app.get '/jobs', (req, res) ->
-    console.log('jobs')
     res.format
       'application/json': ->
         res.send(server.jsonableState())

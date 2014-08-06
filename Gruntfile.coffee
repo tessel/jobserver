@@ -12,7 +12,7 @@ module.exports = (grunt) ->
         dest:'ui/app.js'
     watch:
       app:
-        files: '**/*.coffee'
+        files: 'ui/**/*.coffee'
         tasks: ['browserify']
 
   # These plugins provide necessary tasks.
