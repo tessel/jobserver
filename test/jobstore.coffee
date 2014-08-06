@@ -9,6 +9,9 @@ describe 'JobStore', ->
   job.description = 'Test'
   job.state = 'pending'
 
+  before (done) ->
+    jobstore.init done
+
   it 'stores jobs and adds an id', (done) ->
     jobstore.addJob job, ->
       assert job.id

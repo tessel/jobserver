@@ -23,9 +23,10 @@ class OrderingJob extends jobserver.Job
 describe 'Job', ->
   jobstore = blobstore = server = null
 
-  before ->
+  before (done) ->
     server = new jobserver.Server()
     server.defaultExecutor = new jobserver.Executor()
+    server.init done
 
   describe 'Running a job', (cb) ->
     job = null
@@ -116,9 +117,10 @@ describe 'LocalExecutor', ->
     server = null
     e = null
     blobstore = null
-    beforeEach ->
+    beforeEach (done) ->
       server = new jobserver.Server()
       e = new jobserver.LocalExecutor()
+      server.init done
 
     it 'Runs subtasks with a queue', (cb) ->
       order = []

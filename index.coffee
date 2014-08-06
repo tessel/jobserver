@@ -32,6 +32,9 @@ STATES = [
 
     @activeJobs = {}
 
+  init: (cb) ->
+    @jobStore.init(cb)
+
   submit: (job, doneCb) ->
     server = this
 

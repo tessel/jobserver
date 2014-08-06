@@ -19,9 +19,15 @@ jobCols = [
 module.exports = class JobStoreSQLite extends JobStore
   constructor: (path=':memory:') ->
     @db = new sqlite3.Database(path)
-    @createSchema()
 
-  createSchema: ->
+  init: (cb) ->
+    @db.get "PRAGMA user_version;", (err, row) =>
+      if parseInt(row.user_version, 10) == 0
+        @createSchema(cb)
+      else cb()
+
+  createSchema: (cb) ->
+    console.log "Initializing database"
     @db.serialize =>
       @db.run "CREATE TABLE jobs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -51,6 +57,7 @@ module.exports = class JobStoreSQLite extends JobStore
         value
       );"
       @db.run "CREATE INDEX results_jobId ON results (jobId);"
+      @db.run "PRAGMA user_version=1;", -> cb()
 
   addJob: (job, cb) ->
     @db.run "INSERT INTO jobs (#{jobCols.join(',')}) VALUES (#{('?' for i in jobCols).join(',')});",

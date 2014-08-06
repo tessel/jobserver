@@ -107,7 +107,9 @@ if module is require.main
   server = new jobserver.Server()
   e1 = new jobserver.SeriesExecutor(new jobserver.Executor())
   e2 = new jobserver.SeriesExecutor(new jobserver.Executor())
-  web(server).listen(8080)
+
+  server.init ->
+    web(server).listen(8080)
 
   n = 0
 
