@@ -285,8 +285,6 @@ class TeeStream extends Transform
 
   # Override this
   run: (ctx) ->
-    ctx.write("Default exec!\n")
-    setImmediate( -> ctx.done(null) )
 
 # An in-memory BlobStore
 @BlobStoreMem = class BlobStoreMem extends BlobStore
