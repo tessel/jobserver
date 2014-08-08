@@ -54,6 +54,9 @@ STATES = [
       job.on 'state', (state) ->
         server.emit 'job.state', this, state
 
+      job.on 'dependencyAdded', (dep) ->
+        server.emit 'job.dependencyAdded', this, dep
+
       job.once 'settled', =>
         delete @activeJobs[job.id]
         doneCb() if doneCb

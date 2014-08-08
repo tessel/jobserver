@@ -46,6 +46,13 @@ module.exports = web = (server, app) ->
     for res in connections when res.jobs is null or res.jobs.indexOf(job.id) != -1
       res.sse('job', msg)
 
+  server.on 'job.dependencyAdded', (job, dep) ->
+    msg = dep.jsonableState()
+    for res in connections when res.jobs? and res.jobs.indexOf(job.id) != -1
+      if res.jobs.indexOf(dep.id) == -1
+        res.jobs.push(dep.id)
+        res.sse(msg)
+
   server.on 'submitted', (job) ->
     msg = job.jsonableState()
     for res in connections when res.jobs is null
