@@ -12,8 +12,10 @@ class SSEStream extends Transform
     this.push("event: end\ndata: null\n\n")
     callback()
 
-module.exports = web = (server) ->
-  app = express()
+module.exports = web = (server, app) ->
+  if not app
+    app = express()
+
   app.use(express.static(__dirname + '/ui'));
   index_page = __dirname + '/ui/index.html'
 
