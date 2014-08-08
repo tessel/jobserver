@@ -315,12 +315,6 @@ Context: class Context extends TeeStream
     # If not stdout, then a null sink, or some other way of fixing this.
     @pipe(process.stdout)
 
-  before: (cb) ->
-    setImmediate(cb)
-
-  after: (cb) ->
-    setImmediate(cb)
-
   _doSeries: (cb) ->
     async.series @queue, @_done
 
@@ -336,9 +330,9 @@ Context: class Context extends TeeStream
     @domain.exit()
     @domain.dispose()
 
-    @after (e) =>
-      @end()
-      @job.log = @log
+    @end()
+    @job.log = @log
+    setImmediate =>
       @job.afterRun(!err)
 
   then: (fn) ->
