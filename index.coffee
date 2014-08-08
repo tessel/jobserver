@@ -8,6 +8,7 @@ rimraf = require('rimraf')
 child_process = require('child_process')
 path = require 'path'
 fs = require 'fs'
+domain = require 'domain'
 async = require 'async'
 
 hashDigest = (hash) -> hash.toString('base64').replace(/\=/g, '').replace(/\//g, '-')
@@ -332,8 +333,10 @@ Context: class Context extends TeeStream
       return
     @_completed = true
 
+    @domain.exit()
+    @domain.dispose()
+
     @after (e) =>
-      throw e if e
       @end()
       @job.log = @log
       @job.afterRun(!err)
@@ -355,12 +358,16 @@ Context: class Context extends TeeStream
 # An Executor manages the execution of a set of jobs. May also wrap access to an execution resource
 @Executor = class Executor
   enqueue: (job) ->
-    try
       job.beforeRun()
-      job.run(job.ctx)
-      job.ctx._doSeries()
-    catch e
-      job.ctx._done(e)
+      job.ctx.domain = domain.create()
+
+      job.ctx.domain.on 'error', (err) ->
+        job.ctx._done(err)
+
+      job.ctx.domain.run ->
+        job.run(job.ctx)
+        job.ctx._doSeries()
+
 
 # An executor combinator that runs jobs one at a time in series on a specified executor
 @SeriesExecutor = class SeriesExecutor extends Executor

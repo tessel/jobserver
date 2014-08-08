@@ -95,6 +95,22 @@ describe 'Job', ->
     it 'persists children and parents of middle jobs to the database', (done) ->
       checkRelated 2, [0, 2, 3, 5], done
 
+    describe 'contains failure', ->
+      it 'at the top level', (done) ->
+        job = new TestJob (ctx) ->
+          throw new Error("Test error")
+        server.submit job, ->
+          assert.equal job.state, 'fail'
+          done()
+
+      it 'in callbacks', (done) ->
+        job = new TestJob (ctx) ->
+          ctx.then (cb) ->
+            setImmediate -> throw new Error("Test error")
+        server.submit job, ->
+          assert.equal job.state, 'fail'
+          done()
+
   it 'Fails if dependencies fail', (done) ->
     j1 = new TestJob (ctx) ->
       ctx.then (cb) -> cb("testErr")
