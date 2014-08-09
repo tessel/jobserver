@@ -143,6 +143,14 @@ describe 'Job', ->
         assert.equal l.length, 2
         done()
 
+  it 'Fails if a child job fails', (done) ->
+    j1 = new TestJob (ctx) ->
+      ctx.runJob new TestJob (ctx) ->
+        throw new Error("test job")
+    server.submit j1, ->
+      assert.equal j1.state, 'fail'
+      done()
+
   it 'Generates implicit dependencies based on input'
   it 'Rejects dependency cycles'
   it 'Hashes consistently'

@@ -344,7 +344,11 @@ Context: class Context extends TeeStream
   runJob: (child) ->
     parent = @job
     @then (cb) ->
-      parent.server.submit(child, cb)
+      parent.server.submit child, ->
+        if child.state == 'success'
+          cb()
+        else
+          cb("Child job #{child.id} failed")
       child.withId ->
         parent.emit 'dependencyAdded', child
 
