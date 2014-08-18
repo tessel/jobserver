@@ -30,7 +30,7 @@ STATES = [
     unless @jobStore
       JobStoreSQLite = require('./jobstore_sqlite')
       @jobStore = new JobStoreSQLite(':memory:')
-    @defaultExecutor = new Executor()
+    @defaultResource = new Resource()
 
     @activeJobs = {}
 
@@ -149,7 +149,7 @@ class TeeStream extends Transform
   resultNames: []
   pure: false
 
-  constructor: (@executor, @inputs={}) ->
+  constructor: (@resource, @inputs={}) ->
     @explicitDependencies = []
     @state = null
     @result = {}
@@ -162,7 +162,7 @@ class TeeStream extends Transform
   config: ->
 
   submitted: (@server) ->
-    @executor ?= @server.defaultExecutor
+    @resource ?= @server.defaultResource
 
     @dependencies = @explicitDependencies.slice(0)
     for k, v of @inputs
@@ -247,11 +247,11 @@ class TeeStream extends Transform
 
     @_hash
 
-  enqueue: (executor) ->
-    @executor ?= executor
+  enqueue: (resource) ->
+    @resource ?= resource
     @saveState 'pending'
     @ctx = new Context(this)
-    @executor.enqueue(this)
+    @resource.enqueue(this)
     @emit 'started'
 
   saveState: (state) ->
@@ -306,7 +306,7 @@ class TeeStream extends Transform
       cb(v)
     return
 
-# An Executor provides a Job a Context to access resources
+# An Resource provides a Job a Context to access resources
 Context: class Context extends TeeStream
   constructor: (@job)->
     super()
@@ -354,8 +354,8 @@ Context: class Context extends TeeStream
     for k, v of obj
       this[k] = v
 
-# An Executor manages the execution of a set of jobs. May also wrap access to an execution resource
-@Executor = class Executor
+# An Resource manages the execution of a set of jobs and provides them access to system resources
+@Resource = class Resource
   enqueue: (job) ->
       job.beforeRun()
       job.ctx.domain = domain.create()
@@ -368,9 +368,9 @@ Context: class Context extends TeeStream
         job.ctx._doSeries()
 
 
-# An executor combinator that runs jobs one at a time in series on a specified executor
-@SeriesExecutor = class SeriesExecutor extends Executor
-  constructor: (@executor) ->
+# A resource combinator that runs jobs one at a time in series on a specified resource
+@SeriesResource = class SeriesResource extends Resource
+  constructor: (@resource) ->
     super()
     @currentJob = null
     @queue = []
@@ -383,9 +383,9 @@ Context: class Context extends TeeStream
       @currentJob = @queue.shift()
       if @currentJob
         @currentJob.on 'settled', @shift
-        @executor.enqueue(@currentJob)
+        @resource.enqueue(@currentJob)
 
-@LocalExecutor = class LocalExecutor extends Executor
+@LocalResource = class LocalResource extends Resource
   enqueue: (job) ->
     ctx = job.ctx
     temp.mkdir "jobserver-#{job.name}", (err, dir) =>
@@ -399,7 +399,7 @@ Context: class Context extends TeeStream
       ctx.on 'end', =>
         rimraf dir, ->
 
-      Executor::enqueue.call(this, job)
+      Resource::enqueue.call(this, job)
 
   ctxMixin:
     envImmediate: (e) ->

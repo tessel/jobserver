@@ -25,7 +25,7 @@ describe 'Job', ->
 
   before (done) ->
     server = new jobserver.Server()
-    server.defaultExecutor = new jobserver.Executor()
+    server.defaultResource = new jobserver.Resource()
     server.init done
 
   describe 'Running a job', (cb) ->
@@ -156,10 +156,10 @@ describe 'Job', ->
   it 'Hashes consistently'
   it 'Avoids recomputing calculated jobs'
 
-describe 'SeriesExecutor', ->
+describe 'SeriesResource', ->
     e = null
     beforeEach ->
-      e = new jobserver.SeriesExecutor(new jobserver.Executor())
+      e = new jobserver.SeriesResource(new jobserver.Resource())
 
     it 'Runs jobs in order', (done) ->
       jobs = (new OrderingJob() for i in [0...3])
@@ -169,13 +169,13 @@ describe 'SeriesExecutor', ->
           jobs[i].assertRanAfter(jobs[i-1])
         done()
 
-describe 'LocalExecutor', ->
+describe 'LocalResource', ->
     server = null
     e = null
     blobstore = null
     beforeEach (done) ->
       server = new jobserver.Server()
-      e = new jobserver.LocalExecutor()
+      e = new jobserver.LocalResource()
       server.init done
 
     it 'Runs subtasks with a queue', (cb) ->
@@ -216,7 +216,7 @@ describe 'LocalExecutor', ->
       j = new TestJob (ctx) ->
         ctx.run('echo hello > test.txt')
         ctx.get('test', 'test.txt')
-      j.executor = e
+      j.resource = e
       server.submit j, ->
         assert.equal(j.state, 'success')
         j.result.test.getBuffer (data) ->
@@ -229,7 +229,7 @@ describe 'LocalExecutor', ->
         ctx.put(@inputs.test, 'test.txt')
         ctx.run 'echo Hello > test2.txt'
         ctx.run 'diff -u test.txt test2.txt'
-      j.executor = e
+      j.resource = e
       j.inputs.test = b
       server.submit j, ->
         assert.equal(j.state, 'success')

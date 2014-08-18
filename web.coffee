@@ -114,8 +114,8 @@ module.exports = web = (server, app) ->
 if module is require.main
   jobserver = require './index'
   server = new jobserver.Server()
-  e1 = new jobserver.SeriesExecutor(new jobserver.Executor())
-  e2 = new jobserver.SeriesExecutor(new jobserver.Executor())
+  e1 = new jobserver.SeriesResource(new jobserver.Resource())
+  e2 = new jobserver.SeriesResource(new jobserver.Resource())
 
   server.init ->
     web(server).listen(8080)
@@ -124,7 +124,7 @@ if module is require.main
 
   setInterval (->
     j = new jobserver.Job()
-    j.executor = if n & 1 then e1 else e2
+    j.resource = if n & 1 then e1 else e2
     j.name = "test"
     j.description = "Test Job #{n += 1}"
     j.run = (ctx) ->

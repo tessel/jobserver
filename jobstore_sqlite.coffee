@@ -7,7 +7,7 @@ jobCols = [
   'description'
   'state'
   'submittedBy'
-  'executorInfo'
+  'resourceInfo'
   'fromCache'
   'pure'
   'submitTime'
