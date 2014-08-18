@@ -1,4 +1,4 @@
-{JobInfo, JobStore} = require './index'
+{JobInfo, JobStore, Blob, FutureResult} = require './index'
 sqlite3 = require 'sqlite3'
 
 jobCols = [
@@ -21,8 +21,9 @@ module.exports = class JobStoreSQLite extends JobStore
     @db = new sqlite3.Database(path)
 
   init: (cb) ->
+    @db.serialize()
     @db.get "PRAGMA user_version;", (err, row) =>
-      if parseInt(row.user_version, 10) == 0
+      if parseInt(row.user_version, 10) < 2
         @createSchema(cb)
       else cb()
 
@@ -48,16 +49,20 @@ module.exports = class JobStoreSQLite extends JobStore
       @db.run "CREATE TABLE inputs (
         jobId,
         name,
-        value
+        type,
+        value,
+        UNIQUE(jobId, name)
       );"
       @db.run "CREATE INDEX inputs_jobId ON inputs (jobId);"
       @db.run "CREATE TABLE results (
         jobId,
         name,
-        value
+        type,
+        value,
+        UNIQUE(jobId, name)
       );"
       @db.run "CREATE INDEX results_jobId ON results (jobId);"
-      @db.run "PRAGMA user_version=1;", -> cb()
+      @db.run "PRAGMA user_version=2;", -> cb()
 
   addJob: (job, cb) ->
     @db.run "INSERT INTO jobs (#{jobCols.join(',')}) VALUES (#{('?' for i in jobCols).join(',')});",
@@ -82,19 +87,35 @@ module.exports = class JobStoreSQLite extends JobStore
     job.on 'computed', =>
       @addResults(job)
 
-  jobFromRow: (row) ->
+  jobFromRow: (row, inputs, results) ->
     return null unless row
     j = new JobInfo()
     j.id = row.id
     for k in jobCols
       j[k] = row[k]
+
+    if inputs?
+      j.inputs = {}
+      for r in inputs
+        j.inputs[r.name] = @deserializeValue(r.type, r.value)
+
+    if results?
+      j.result = {}
+      for r in results
+        j.result[r.name] = @deserializeValue(r.type, r.value)
+
     j
 
   getJob: (id, cb) ->
     @db.get "SELECT id, #{jobCols.join(',')} FROM jobs WHERE id=?;", [id], (err, row) =>
       if err
         console.error(err)
-      cb(@jobFromRow(row))
+        cb(null)
+      @db.all "SELECT name, type, value FROM inputs WHERE jobId=?;", [id], (err, inputs) =>
+        console.error(err) if err
+        @db.all "SELECT name, type, value FROM results WHERE jobId=?;", [id], (err, results) =>
+          console.error(err) if err
+          cb(@jobFromRow(row, inputs, results))
 
   updateJob: (job) ->
     @db.run "UPDATE jobs SET state=?, hash=?, fromCache=?, startTime=?, endTime=?, logBlob=? WHERE id=?",
@@ -116,4 +137,26 @@ module.exports = class JobStoreSQLite extends JobStore
       cb(@jobFromRow(row) for row in rows)
 
   addInputs: (job) ->
-  addOutputs: (job) ->
+    @db.serialize =>
+      for key, v of job.inputs
+        [type, value] = @serializeValue(v)
+        @db.run "INSERT INTO inputs (jobId, name, type, value) VALUES (?,?,?,?)", [job.id, key, type, value]
+
+  addResults: (job) ->
+    @db.serialize =>
+      for key, v of job.result
+        [type, value] = @serializeValue(v)
+        @db.run "INSERT INTO results (jobId, name, type, value) VALUES (?,?,?,?)", [job.id, key, type, value]
+
+  serializeValue: (v) ->
+    if v instanceof FutureResult
+      v = v.get()
+    if v instanceof Blob
+      ['blob', v.id]
+    else
+      ['json', JSON.stringify(v)]
+
+  deserializeValue: (type, value) ->
+    switch type
+      when 'json' then JSON.parse(value)
+      when 'blob' then new Blob(@blobStore, value)

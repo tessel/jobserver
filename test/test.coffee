@@ -2,6 +2,8 @@ assert = require 'assert'
 jobserver = require '../index'
 
 class TestJob extends jobserver.Job
+  name: 'test'
+  description: 'Test Job'
   constructor: (@run) ->
     super()
 
@@ -109,6 +111,47 @@ describe 'Job', ->
             setImmediate -> throw new Error("Test error")
         server.submit job, ->
           assert.equal job.state, 'fail'
+          done()
+
+  it 'persists inputs and results', (done) ->
+    j1 = new TestJob (ctx) ->
+      @ctx.then (cb) =>
+        @result['outStr'] = 'test'
+        cb()
+      @ctx.then (cb) =>
+        data = new Buffer('Hello World')
+        @result['outBlob'] = @server.blobStore.putBlob(data, {}, cb)
+    j1.inputs.inStr = 'foo'
+    j1.result.outStr = new jobserver.FutureResult(j1, 'outStr')
+    j1.result.outBlob = new jobserver.FutureResult(j1, 'outBlob')
+
+    j2 = new TestJob (ctx) ->
+      @ctx.then (cb) =>
+        @result.outBlob2 = @inputs.inBlob
+        cb()
+    j2.inputs.inBlob = j1.result.outBlob
+
+    server.submit j2, ->
+      assert.equal j1.state, 'success'
+      assert.equal j2.state, 'success'
+
+      server.job j1.id, (j1db) =>
+        server.job j2.id, (j2db) =>
+          assert.equal j1db.constructor.name, 'JobInfo' # these should be the deserialized versions
+          assert.equal j2db.constructor.name, 'JobInfo'
+
+          assert.equal j1db.name, 'test'
+          assert.equal j1db.state, 'success'
+          assert.equal j1db.description, TestJob::description
+
+          assert.equal j1db.inputs.inStr, 'foo'
+          assert.equal j1db.result.outStr, 'test'
+          assert j1db.result.outBlob instanceof jobserver.Blob
+          h = jobserver.BlobStore::hash('Hello World')
+          assert.equal j1db.result.outBlob.id, h
+          assert.equal j2db.inputs.inBlob.id, h
+          assert.equal j2db.result.outBlob2.id, h
+
           done()
 
   it 'aborts if dependencies fail', (done) ->

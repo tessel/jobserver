@@ -32,6 +32,8 @@ STATES = [
       @jobStore = new JobStoreSQLite(':memory:')
     @defaultResource = new Resource()
 
+    @jobStore.blobStore = @blobStore
+
     @activeJobs = {}
 
   init: (cb) ->
@@ -155,7 +157,7 @@ class TeeStream extends Transform
     @result = {}
 
     for key in @resultNames
-      @result[key] = @result[key] = new FutureResult(this, key)
+      @result[key] = new FutureResult(this, key)
 
     @config()
 
@@ -274,8 +276,7 @@ class TeeStream extends Transform
     if @server
       @logBlob = @server.blobStore.putBlob(@ctx.log, {from: 'log', jobId: @id})
 
-    if @pure
-      @emit 'computed'
+    @emit 'computed'
 
     if result
       @saveState('success')
