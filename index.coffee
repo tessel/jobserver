@@ -198,9 +198,7 @@ class TeeStream extends Transform
     ready = true
     for dep in @dependencies
       switch dep.state
-        when 'fail'
-          return @saveState 'fail'
-        when 'abort'
+        when 'fail', 'abort'
           return @saveState 'abort'
         when 'success'
           # nothing

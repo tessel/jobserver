@@ -111,7 +111,7 @@ describe 'Job', ->
           assert.equal job.state, 'fail'
           done()
 
-  it 'Fails if dependencies fail', (done) ->
+  it 'aborts if dependencies fail', (done) ->
     j1 = new TestJob (ctx) ->
       ctx.then (cb) -> cb("testErr")
     j3 = new TestJob (ctx) ->
@@ -121,7 +121,7 @@ describe 'Job', ->
     j2.explicitDependencies.push(j3)
     server.submit j2, ->
       assert.equal j1.state, 'fail'
-      assert.equal j2.state, 'fail'
+      assert.equal j2.state, 'abort'
       done()
 
   it 'Can run a job as a step of another', (done) ->
