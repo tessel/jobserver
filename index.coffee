@@ -101,7 +101,7 @@ STATES = [
   constructor: (@job, @key) ->
   get: ->
     if @job.state == 'success'
-      @job.result[@key]
+      @job.results[@key]
     else
       throw new Error("Accessing result of job with status #{@job.status}")
 
@@ -154,10 +154,10 @@ class TeeStream extends Transform
   constructor: (@resource, @inputs={}) ->
     @explicitDependencies = []
     @state = null
-    @result = {}
+    @results = {}
 
     for key in @resultNames
-      @result[key] = new FutureResult(this, key)
+      @results[key] = new FutureResult(this, key)
 
     @config()
 
@@ -212,8 +212,8 @@ class TeeStream extends Transform
       if @pure
         @server.jobStore.resultByHash @hash(), (completion) =>
           if completion
-            @result.fromCache = completion.id
-            {@result, @startTime, @endTime} = completion
+            @fromCache = completion.id
+            {@results, @startTime, @endTime} = completion
             @saveState(completion.status)
           else
             @enqueue()
@@ -441,7 +441,7 @@ Context: class Context extends TeeStream
       @then (cb) =>
         fs.readFile path.resolve(@_cwd, filename), (err, data) =>
           return cb(err) if err
-          @job.result[output] = @job.server.blobStore.putBlob(data, {from: 'file', jobId: @job.id, name: output}, cb)
+          @job.results[output] = @job.server.blobStore.putBlob(data, {from: 'file', jobId: @job.id, name: output}, cb)
 
     git_clone: (repo, branch, dir) ->
       @run('git', ['clone', '--depth=1', '-b', branch, '--', repo, dir])

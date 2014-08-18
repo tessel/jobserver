@@ -116,20 +116,20 @@ describe 'Job', ->
   it 'persists inputs and results', (done) ->
     j1 = new TestJob (ctx) ->
       @ctx.then (cb) =>
-        @result['outStr'] = 'test'
+        @results['outStr'] = 'test'
         cb()
       @ctx.then (cb) =>
         data = new Buffer('Hello World')
-        @result['outBlob'] = @server.blobStore.putBlob(data, {}, cb)
+        @results['outBlob'] = @server.blobStore.putBlob(data, {}, cb)
     j1.inputs.inStr = 'foo'
-    j1.result.outStr = new jobserver.FutureResult(j1, 'outStr')
-    j1.result.outBlob = new jobserver.FutureResult(j1, 'outBlob')
+    j1.results.outStr = new jobserver.FutureResult(j1, 'outStr')
+    j1.results.outBlob = new jobserver.FutureResult(j1, 'outBlob')
 
     j2 = new TestJob (ctx) ->
       @ctx.then (cb) =>
-        @result.outBlob2 = @inputs.inBlob
+        @results.outBlob2 = @inputs.inBlob
         cb()
-    j2.inputs.inBlob = j1.result.outBlob
+    j2.inputs.inBlob = j1.results.outBlob
 
     server.submit j2, ->
       assert.equal j1.state, 'success'
@@ -145,12 +145,12 @@ describe 'Job', ->
           assert.equal j1db.description, TestJob::description
 
           assert.equal j1db.inputs.inStr, 'foo'
-          assert.equal j1db.result.outStr, 'test'
-          assert j1db.result.outBlob instanceof jobserver.Blob
+          assert.equal j1db.results.outStr, 'test'
+          assert j1db.results.outBlob instanceof jobserver.Blob
           h = jobserver.BlobStore::hash('Hello World')
-          assert.equal j1db.result.outBlob.id, h
+          assert.equal j1db.results.outBlob.id, h
           assert.equal j2db.inputs.inBlob.id, h
-          assert.equal j2db.result.outBlob2.id, h
+          assert.equal j2db.results.outBlob2.id, h
 
           done()
 
@@ -262,7 +262,7 @@ describe 'LocalResource', ->
       j.resource = e
       server.submit j, ->
         assert.equal(j.state, 'success')
-        j.result.test.getBuffer (data) ->
+        j.results.test.getBuffer (data) ->
           assert.equal(data.toString('utf8'), 'hello\n')
           cb()
 

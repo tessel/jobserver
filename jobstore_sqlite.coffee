@@ -100,9 +100,9 @@ module.exports = class JobStoreSQLite extends JobStore
         j.inputs[r.name] = @deserializeValue(r.type, r.value)
 
     if results?
-      j.result = {}
+      j.results = {}
       for r in results
-        j.result[r.name] = @deserializeValue(r.type, r.value)
+        j.results[r.name] = @deserializeValue(r.type, r.value)
 
     j
 
@@ -144,7 +144,7 @@ module.exports = class JobStoreSQLite extends JobStore
 
   addResults: (job) ->
     @db.serialize =>
-      for key, v of job.result
+      for key, v of job.results
         [type, value] = @serializeValue(v)
         @db.run "INSERT INTO results (jobId, name, type, value) VALUES (?,?,?,?)", [job.id, key, type, value]
 
