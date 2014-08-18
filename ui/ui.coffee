@@ -62,6 +62,7 @@ class JobSidebar extends Backbone.View
   render: ->
     @$('#title').empty().append(app.selectedJob.get 'description')
     @logs.close() if @logs
+    @$('#log').empty()
     @logs = app.selectedJob.logs()
     @logs.addEventListener 'open', =>
       console.log('open log')
@@ -95,6 +96,7 @@ connect = (path) ->
 
   listen 'hello', (m) ->
     app.jobs.reset(m.jobs)
+    app.selectJob(app.jobs.at(0))
 
   listen 'job', (m) ->
     app.jobs.add(m, {merge: true})
