@@ -41,6 +41,9 @@ class JobTile extends Backbone.View
       @$el.click =>
         app.selectJob(@model)
 
+      @$el.dblclick =>
+        app.router.navigate("/jobs/#{@model.id}", true)
+
     @$el
 
 app.selectJob = (job) ->
@@ -111,5 +114,5 @@ $().ready ->
   app.jobs = new JobCollection()
   app.list = new ListView()
   app.sidebar = new JobSidebar({el: '#info'})
-  new Router()
+  app.router = new Router()
   Backbone.history.start({pushState: true});
