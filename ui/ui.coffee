@@ -30,6 +30,7 @@ class JobTile extends Backbone.View
   initialize: ->
     @listenTo @model, 'change', this.render
     @listenTo @model, 'destroy', this.remove
+    @listenTo app, 'selectedJob', this.updateSelection
 
   render: ->
     @$el.attr('data-status', @model.get 'state')
@@ -45,6 +46,9 @@ class JobTile extends Backbone.View
         app.router.navigate("/jobs/#{@model.id}", true)
 
     @$el
+
+  updateSelection: (j) ->
+    @$el.toggleClass('selected', j.id is @model.id)
 
 app.selectJob = (job) ->
   app.selectedJob = job
