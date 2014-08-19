@@ -119,7 +119,7 @@ module.exports = class JobStoreSQLite extends JobStore
 
   updateJob: (job) ->
     @db.run "UPDATE jobs SET state=?, hash=?, fromCache=?, startTime=?, endTime=?, logBlob=? WHERE id=?",
-                         [job.state, job._hash, job.fromCache, job.startTime, job.endTime,
+                         [job.state, job._hash, job.fromCache, +job.startTime, +job.endTime,
                          job.logBlob?.id, job.id]
 
   addDependency: (job, dep) ->

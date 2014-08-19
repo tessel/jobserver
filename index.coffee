@@ -47,6 +47,7 @@ STATES = [
         job.once 'settled', doneCb
       return
     job.alreadySubmitted = true
+    job.submitTime = +new Date()
 
     @jobStore.addJob job, =>
       @activeJobs[job.id] = job
@@ -93,7 +94,7 @@ STATES = [
     id = parseInt(id, 10)
     @jobStore.getRelatedJobs(id, cb)
 
-  jsonableState: ->
+  toJSON: ->
     {}
 
 # A `FutureResult` is a reference to a result of a `Job` which may not yet have completed
@@ -107,6 +108,12 @@ STATES = [
 
   getBuffer: (cb) -> @get().getBuffer(cb)
   getId: -> @get().id
+
+  toJSON: ->
+    if @job.state == 'success'
+      @get()
+    else
+      {pending: true, jobId: @job.id}
 
 # `BlobStore` is the abstract base class for result file data storage.
 # Subclasses persist Buffers and retrieve them by hash.
@@ -125,6 +132,8 @@ STATES = [
   getBuffer: (cb) -> @store.getBlob(@id, cb)
   getId: -> @id
 
+  toJSON: -> {blob:true, @id}
+
 # Abstact base class for database of job history
 @JobStore = class JobStore
 
@@ -140,8 +149,9 @@ class TeeStream extends Transform
     callback()
 
 @JobInfo = class JobInfo extends EventEmitter
-  jsonableState: ->
-    {@id, @name, @description, @state, settled: @settled()}
+  toJSON: ->
+    {@id, @name, @description, @state, settled: @settled(),
+    @submitTime, @startTime, @endTime, @pure, @hash, @inputs, @results}
 
   settled: ->
     @state in ['success', 'fail', 'abort']
@@ -266,11 +276,11 @@ class TeeStream extends Transform
       @emit 'settled'
 
   beforeRun: () ->
-    @startTime = new Date()
+    @startTime = +new Date()
     @saveState 'running'
 
   afterRun: (result) ->
-    @endTime = new Date()
+    @endTime = +new Date()
     @fromCache = false
 
     if @server

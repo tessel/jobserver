@@ -27,8 +27,8 @@ module.exports = web = (server, app) ->
     initialJobs = jobs ? (job for id, job of server.activeJobs)
 
     res.sse 'hello',
-      server: server.jsonableState()
-      jobs: (job.jsonableState() for job in initialJobs)
+      server: server
+      jobs: initialJobs
 
     res.jobs = if jobs?
       job.id for job in jobs when not job.settled()
@@ -42,26 +42,26 @@ module.exports = web = (server, app) ->
       console.log 'closed response:', connections.length, 'left'
 
   server.on 'job.state', (job) ->
-    msg = job.jsonableState()
+    msg = job.toJSON()
     for res in connections when res.jobs is null or res.jobs.indexOf(job.id) != -1
       res.sse('job', msg)
 
   server.on 'job.dependencyAdded', (job, dep) ->
-    msg = dep.jsonableState()
+    msg = dep.toJSON()
     for res in connections when res.jobs? and res.jobs.indexOf(job.id) != -1
       if res.jobs.indexOf(dep.id) == -1
         res.jobs.push(dep.id)
         res.sse(msg)
 
   server.on 'submitted', (job) ->
-    msg = job.jsonableState()
+    msg = job.toJSON()
     for res in connections when res.jobs is null
       res.sse('job', msg)
 
   app.get '/jobs', (req, res) ->
     res.format
       'application/json': ->
-        res.send(server.jsonableState())
+        res.send(server.toJSON())
 
       'text/html': ->
         res.sendfile(index_page)
@@ -76,7 +76,7 @@ module.exports = web = (server, app) ->
 
       res.format
         'application/json': ->
-          res.send(job.jsonableState())
+          res.send(job.toJSON())
 
         'text/html': ->
           res.sendfile(index_page)
@@ -85,7 +85,7 @@ module.exports = web = (server, app) ->
     server.relatedJobs req.params.id, (jobs) ->
       res.format
         'application/json': ->
-          res.send(job.jsonableState() for job in jobs)
+          res.send(job.toJSON() for job in jobs)
 
         'text/html': ->
           res.sendfile(index_page)
@@ -130,6 +130,7 @@ if module is require.main
     j.run = (ctx) ->
       ctx.then (cb) ->
         ctx.write("\x1b[32mFoo\rStart\x1b[39m\n")
+        j.results.test = 'bar'
         setTimeout(cb, 7000 * Math.random() + 1000)
       ctx.then (cb) ->
         i = 0
@@ -141,5 +142,6 @@ if module is require.main
             ctx.write "remote: Compressing objects: 100% (1/1), done.\x1b[K\r\n"
             cb()
         ), 10
+    j.inputs.test = 'foo'
     server.submit(j)
   ), 4000
