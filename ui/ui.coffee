@@ -56,11 +56,21 @@ app.selectJob = (job) ->
 
 class JobSidebar extends Backbone.View
   initialize: ->
-    @listenTo app, 'selectedJob', @render
+    @listenTo app, 'selectedJob', @selection
     @logs = null
 
+  selection: ->
+    @stopListening @model, 'change'
+    @model = app.selectedJob
+    if @model
+      @render()
+      @listenTo @model, 'change', @update
+
   render: ->
-    @$('#title').empty().append(app.selectedJob.get 'description')
+    @$('#title').empty().append(@model.get 'description')
+
+    @update()
+
     @logs.close() if @logs
     @$('#log').empty()
     @logs = app.selectedJob.logs()
@@ -74,6 +84,24 @@ class JobSidebar extends Backbone.View
     @logs.addEventListener 'end', (e) =>
       console.log("stream end")
       @logs.close()
+
+  showList = (elem, dict) ->
+    console.log(dict)
+    elem.empty().hide()
+    for k, v of dict
+      elem.show()
+      $('<dt>').text(k).appendTo(elem)
+      if v.blob
+        a = $("<a>").text('[download]')
+          .attr('href', "/blob/#{v.id}")
+          .attr('download', k)
+        $("<dd>").append(a).appendTo(elem)
+      else
+        $("<dd>").text(JSON.stringify(v)).appendTo(elem)
+
+  update: ->
+    showList(@$('#inputs'), @model.get('inputs'))
+    showList(@$('#results'), @model.get('results'))
 
 connect = (path) ->
   if app.eventsource

@@ -151,22 +151,47 @@ body>header>a {
   color: white;
 }
 
+#info a {
+  color: #ccccff;
+}
+
 #title {
+  flex: 0 0 auto;
   padding: 16px;
   font-family: monospace;
   font-size: 24px;
 }
 
-#log {
+#scroll {
   flex: 1 1 auto;
-  padding: 16px;
+  padding: 0 16px;
+  overflow-y: auto;
+}
+
+#log {
   font-family: monospace;
   font-size: 16px;
-  overflow-y: auto;
+  padding: 16px 0;
 }
 
 #log pre {
   whitespace: pre-wrap;
+}
+
+#scroll dl {
+  padding: 8px;
+  margin: 8px 0;
+  background: #383838;
+  line-height: 1.5em;
+}
+
+#scroll dt {
+  font-weight: bold;
+  height: 0;
+}
+
+#scroll dd {
+  margin-left: 100px;
 }
 
 /* Color scheme from travis-ci */
