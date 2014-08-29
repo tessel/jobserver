@@ -109,6 +109,13 @@ module.exports = web = (server, app) ->
           s.pipe(res)
           res.on 'close', -> s.emit 'close'
 
+  app.get '/blob/:id', (req, res) ->
+    server.blobStore.getBlob req.params.id, (b) ->
+      if b
+        res.header('Content-type', 'application/octet-stream').end(b)
+      else
+        res.status(404).end('Not found')
+
   app
 
 if module is require.main
@@ -131,6 +138,7 @@ if module is require.main
       ctx.then (cb) ->
         ctx.write("\x1b[32mFoo\rStart\x1b[39m\n")
         j.results.test = 'bar'
+        j.results.file = server.blobStore.putBlob(new Buffer('hello world'))
         setTimeout(cb, 7000 * Math.random() + 1000)
       ctx.then (cb) ->
         i = 0
