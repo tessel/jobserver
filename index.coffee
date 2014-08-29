@@ -111,7 +111,8 @@ STATES = [
 
   toJSON: ->
     if @job.state == 'success'
-      @get()
+      r = @get()
+      if r.toJSON then r.toJSON() else r
     else
       {pending: true, jobId: @job.id}
 
