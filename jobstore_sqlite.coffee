@@ -1,5 +1,6 @@
 {JobInfo, JobStore, Blob, FutureResult} = require './index'
 sqlite3 = require 'sqlite3'
+async = require 'async'
 
 jobCols = [
   'hash'
@@ -87,35 +88,35 @@ module.exports = class JobStoreSQLite extends JobStore
     job.on 'computed', =>
       @addResults(job)
 
-  jobFromRow: (row, inputs, results) ->
-    return null unless row
+  jobFromRow: (row, next) =>
+    cb(null, null) unless row
     j = new JobInfo()
     j.id = row.id
     for k in jobCols
       j[k] = row[k]
 
-    if inputs?
+    @db.all "SELECT name, type, value FROM inputs WHERE jobId=?;", [row.id], (err, inputs) =>
+      return next(err) if err
       j.inputs = {}
       for r in inputs
         j.inputs[r.name] = @deserializeValue(r.type, r.value)
 
-    if results?
-      j.results = {}
-      for r in results
-        j.results[r.name] = @deserializeValue(r.type, r.value)
+      @db.all "SELECT name, type, value FROM results WHERE jobId=?;", [row.id], (err, results) =>
+        return next(err) if err
+        j.results = {}
+        for r in results
+          j.results[r.name] = @deserializeValue(r.type, r.value)
 
-    j
+        next(null, j)
 
   getJob: (id, cb) ->
     @db.get "SELECT id, #{jobCols.join(',')} FROM jobs WHERE id=?;", [id], (err, row) =>
       if err
         console.error(err)
         cb(null)
-      @db.all "SELECT name, type, value FROM inputs WHERE jobId=?;", [id], (err, inputs) =>
-        console.error(err) if err
-        @db.all "SELECT name, type, value FROM results WHERE jobId=?;", [id], (err, results) =>
-          console.error(err) if err
-          cb(@jobFromRow(row, inputs, results))
+      @jobFromRow row, (err, j) ->
+        console.error(err) if j
+        cb(j)
 
   updateJob: (job) ->
     @db.run "UPDATE jobs SET state=?, hash=?, fromCache=?, startTime=?, endTime=?, logBlob=? WHERE id=?",
@@ -134,7 +135,9 @@ module.exports = class JobStoreSQLite extends JobStore
               SELECT parent FROM jobs_closure WHERE child=?);", [id, id], (err, rows) =>
       console.error(err) if err
       return cb(null) unless rows
-      cb(@jobFromRow(row) for row in rows)
+      async.map rows, @jobFromRow, (err, jobs) ->
+        console.error(err)
+        cb(jobs)
 
   addInputs: (job) ->
     @db.serialize =>
