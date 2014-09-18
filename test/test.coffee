@@ -157,9 +157,11 @@ describe 'Job', ->
   it 'aborts if dependencies fail', (done) ->
     j1 = new TestJob (ctx) ->
       ctx.then (cb) -> cb("testErr")
+    j1.results.test = new jobserver.FutureResult(j1, 'test')
     j3 = new TestJob (ctx) ->
       ctx.then (cb) -> setTimeout(cb, 1)
     j2 = new TestJob (ctx) ->
+    j2.inputs.test = j1.results.test
     j2.explicitDependencies.push(j1)
     j2.explicitDependencies.push(j3)
     server.submit j2, ->

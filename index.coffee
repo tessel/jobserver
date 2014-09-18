@@ -101,10 +101,9 @@ STATES = [
 @FutureResult = class FutureResult
   constructor: (@job, @key) ->
   get: ->
-    if @job.state == 'success'
-      @job.results[@key]
-    else
-      throw new Error("Accessing result of job with status #{@job.status}")
+    if @job.results[@key] is this
+      return null
+    @job.results[@key]
 
   getBuffer: (cb) -> @get().getBuffer(cb)
   getId: -> @get().id
