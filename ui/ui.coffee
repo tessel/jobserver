@@ -88,7 +88,7 @@ class JobSidebar extends Backbone.View
   showList = (elem, dict) ->
     console.log(dict)
     elem.empty().hide()
-    for k, v of dict
+    for k, v of dict when v
       elem.show()
       $('<dt>').text(k).appendTo(elem)
       if v.blob
