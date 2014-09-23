@@ -103,7 +103,7 @@ class JobSidebar extends Backbone.View
     showList(@$('#inputs'), @model.get('inputs'))
     showList(@$('#results'), @model.get('results'))
 
-connect = (path) ->
+connect = (path, id) ->
   if app.eventsource
     app.eventsource.close()
 
@@ -124,7 +124,7 @@ connect = (path) ->
 
   listen 'hello', (m) ->
     app.jobs.reset(m.jobs)
-    app.selectJob(app.jobs.at(0))
+    app.selectJob((id and app.jobs.get(id)) or app.jobs.at(0))
 
   listen 'job', (m) ->
     app.jobs.add(m, {merge: true})
@@ -141,7 +141,7 @@ class Router extends Backbone.Router
     connect('/jobs')
 
   relatedJobs: (id) ->
-    connect("/jobs/#{id}/related")
+    connect("/jobs/#{id}/related", id)
 
 
 $().ready ->
