@@ -40,31 +40,28 @@ STATES = [
     @jobStore.init(cb)
 
   submit: (job, doneCb) ->
+    if job.settled()
+      return setImmediate(doneCb)
+
+    @transaction (t) ->
+      t.submit(job, t.commit)
+
+    job.once 'settled', doneCb if doneCb
+
+  listenToJob: (job) ->
+    @activeJobs[job.id] = job
     server = this
 
-    if job.alreadySubmitted
-      if doneCb
-        job.once 'settled', doneCb
-      return
-    job.alreadySubmitted = true
-    job.submitTime = +new Date()
+    job.on 'state', (state) ->
+      server.emit 'job.state', this, state
 
-    @jobStore.addJob job, =>
-      @activeJobs[job.id] = job
+    job.on 'dependencyAdded', (dep) ->
+      server.emit 'job.dependencyAdded', this, dep
 
-      server.emit 'submit', job
+    job.once 'settled', =>
+      delete @activeJobs[job.id]
 
-      job.on 'state', (state) ->
-        server.emit 'job.state', this, state
-
-      job.on 'dependencyAdded', (dep) ->
-        server.emit 'job.dependencyAdded', this, dep
-
-      job.once 'settled', =>
-        delete @activeJobs[job.id]
-        doneCb() if doneCb
-
-      job.submitted(this)
+    @emit 'submitted', job
 
   job: (id, cb) ->
     id = parseInt(id, 10)
@@ -94,8 +91,88 @@ STATES = [
     id = parseInt(id, 10)
     @jobStore.getRelatedJobs(id, cb)
 
+  transaction: (cb) ->
+    @jobStore.transaction (t) =>
+      cb(new Transaction(this, t))
+
   toJSON: ->
     {}
+
+class Transaction
+  constructor: (@server, @jobStore) ->
+
+  submit: (job, cb) ->
+    if job.submitTime
+      return job.withId(cb)
+
+    job.server = @server
+    job.state = 'waiting'
+    job.submitTime = +new Date()
+    job.resource ?= @server.defaultResource
+
+    @jobStore.addJob job, =>
+      @server.listenToJob(job)
+      deps = job.processInputDependencies()
+
+      submitDep = (dep, cb) =>
+        @submit dep, =>
+          @addDependency(job, dep, cb)
+
+      async.each deps, submitDep, =>
+        job.stateChanged('waiting')
+        if job.depsFailed()
+          return this.abortJob(job, cb)
+        if job.depsReady()
+          return this.enqueueJob(job, cb)
+        else
+          # If we're waiting for other jobs, let them finish, and continue
+          # in a new transaction
+          for dep in deps when not dep.settled()
+            dep.once 'settled', (state) =>
+              return if job.state != 'waiting'
+              if job.depsFailed()
+                @server.transaction (t) ->
+                  t.abortJob(job, t.commit)
+              else if job.depsReady()
+                @server.transaction (t) ->
+                  t.enqueueJob(job, t.commit)
+          cb()
+
+  enqueueJob: (job, cb) ->
+    @jobStore.addInputs job, =>
+      job.checkCache (cached) =>
+        if cached
+          @saveJob(job, cached.state, cb)
+        else
+          @saveJob job, 'pending', ->
+            setImmediate -> job.enqueue()
+            cb()
+
+  addDependency: (job, dep, cb) ->
+    @jobStore.addDependency job, dep, ->
+      setImmediate -> job.emit 'dependencyAdded', dep
+      cb()
+
+  abortJob: (job, cb) ->
+    @saveJob(job, 'abort', cb)
+
+  saveResult: (job, success, cb) ->
+    @jobStore.addResults job, =>
+      @saveJob job, (if success then 'success' else 'fail'), cb
+
+  saveJob: (job, state, cb) ->
+    if state
+      if state not in STATES
+        throw new Error("Invalid status '#{state}'")
+      job.state = state
+    @jobStore.updateJob job, ->
+      setImmediate -> job.stateChanged(state)
+      cb()
+
+  commit: (cb) =>
+    cb ?= (->)
+    @jobStore.commit(cb)
+
 
 # A `FutureResult` is a reference to a result of a `Job` which may not yet have completed
 @FutureResult = class FutureResult
@@ -173,24 +250,33 @@ class TeeStream extends Transform
 
   config: ->
 
-  submitted: (@server) ->
-    @resource ?= @server.defaultResource
-
+  processInputDependencies: ->
     @dependencies = @explicitDependencies.slice(0)
     for k, v of @inputs
       if v instanceof FutureResult
         @dependencies.push(v.job)
 
+    @dependencies
+
+  depsReady: ->
     for dep in @dependencies
-      server.submit(dep)
-      dep.withId (job) => @emit 'dependencyAdded', job
+      if dep.state != 'success' then return false
+    true
 
-      unless dep.settled()
-        dep.once 'settled', =>
-          @checkDeps()
+  depsFailed: ->
+    for dep in @dependencies
+      if dep.state in ['fail', 'abort'] then return true
+    return false
 
-    @saveState 'waiting'
-    @checkDeps()
+  checkCache: (cb) ->
+    if @pure
+      @server.jobStore.resultByHash @hash(), (completion) =>
+        if completion
+          @fromCache = completion.id
+          {@results, @startTime, @endTime} = completion
+        cb(completion)
+    else
+      cb()
 
   withId: (cb) ->
     job = this
@@ -198,37 +284,6 @@ class TeeStream extends Transform
       setImmediate -> cb(job)
     else
       @once 'state', -> cb(job)
-
-  checkDeps: ->
-    if @state in ['fail', 'abort']
-      # already settled; nothing to do
-      return
-
-    unless @state is 'waiting'
-      throw new Error("checkDeps in state #{@state}")
-
-    ready = true
-    for dep in @dependencies
-      switch dep.state
-        when 'fail', 'abort'
-          return @saveState 'abort'
-        when 'success'
-          # nothing
-        else
-          ready = false
-
-    if ready
-      @emit 'inputsReady'
-      if @pure
-        @server.jobStore.resultByHash @hash(), (completion) =>
-          if completion
-            @fromCache = completion.id
-            {@results, @startTime, @endTime} = completion
-            @saveState(completion.status)
-          else
-            @enqueue()
-      else
-        @enqueue()
 
   hash: ->
     unless @pure
@@ -261,37 +316,22 @@ class TeeStream extends Transform
 
   enqueue: (resource) ->
     @resource ?= resource
-    @saveState 'pending'
     @ctx = new Context(this)
     @resource.enqueue(this)
     @emit 'started'
 
-  saveState: (state) ->
-    if state not in STATES
-      throw new Error("Invalid status '#{state}'")
-    @state = state
+  stateChanged: (state) ->
     @emit 'state', state
-
     if @settled()
       @emit 'settled'
 
   beforeRun: () ->
     @startTime = +new Date()
-    @saveState 'running'
 
-  afterRun: (result) ->
+  afterRun: (cb) ->
     @endTime = +new Date()
     @fromCache = false
-
-    if @server
-      @logBlob = @server.blobStore.putBlob(@ctx.log, {from: 'log', jobId: @id})
-
-    @emit 'computed'
-
-    if result
-      @saveState('success')
-    else
-      @saveState('fail')
+    @logBlob = @server.blobStore.putBlob(@ctx.log, {from: 'log', jobId: @id}, cb)
 
   name: ''
   description: ''
@@ -327,8 +367,10 @@ Context: class Context extends TeeStream
     # If not stdout, then a null sink, or some other way of fixing this.
     @pipe(process.stdout)
 
-  _doSeries: (cb) ->
-    async.series @queue, @_done
+  _doSeries: (next) ->
+    async.series @queue, (err) =>
+      @_done(err)
+      next(!err)
 
   _done: (err) =>
     if err
@@ -344,8 +386,6 @@ Context: class Context extends TeeStream
 
     @end()
     @job.log = @log
-    setImmediate =>
-      @job.afterRun(!err)
 
   then: (fn) ->
     @queue.push(fn)
@@ -353,13 +393,15 @@ Context: class Context extends TeeStream
   runJob: (child) ->
     parent = @job
     @then (cb) ->
-      parent.server.submit child, ->
-        if child.state == 'success'
-          cb()
-        else
-          cb("Child job #{child.id} failed")
-      child.withId ->
-        parent.emit 'dependencyAdded', child
+      parent.server.transaction (t) ->
+        t.submit child, ->
+          t.addDependency parent, child, t.commit
+
+        child.once 'settled', ->
+          if child.state == 'success'
+            cb()
+          else
+            cb("Child job #{child.id} failed")
 
   mixin: (obj) ->
     for k, v of obj
@@ -368,16 +410,24 @@ Context: class Context extends TeeStream
 # An Resource manages the execution of a set of jobs and provides them access to system resources
 @Resource = class Resource
   enqueue: (job) ->
-      job.beforeRun()
-      job.ctx.domain = domain.create()
+    job.server.transaction (t) ->
+      t.saveJob job, 'running', ->
+        t.commit ->
+          job.beforeRun()
+          job.ctx.domain = domain.create()
 
-      job.ctx.domain.on 'error', (err) ->
-        job.ctx._done(err)
+          next = (success) ->
+            job.afterRun ->
+              job.server.transaction (t) ->
+                t.saveResult(job, success, t.commit)
 
-      job.ctx.domain.run ->
-        job.run(job.ctx)
-        job.ctx._doSeries()
+          job.ctx.domain.on 'error', (err) ->
+            job.ctx._done(err)
+            next(false)
 
+          job.ctx.domain.run ->
+            job.run(job.ctx)
+            job.ctx._doSeries(next)
 
 # A resource combinator that runs jobs one at a time in series on a specified resource
 @SeriesResource = class SeriesResource extends Resource

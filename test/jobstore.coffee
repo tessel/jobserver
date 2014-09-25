@@ -10,7 +10,8 @@ describe 'JobStore', ->
   job.state = 'pending'
 
   before (done) ->
-    jobstore.init done
+    jobstore.init ->
+      done()
 
   it 'stores jobs and adds an id', (done) ->
     jobstore.addJob job, ->
@@ -25,9 +26,12 @@ describe 'JobStore', ->
       done()
 
   it 'updates on state changes', (done) ->
-    job.saveState('success')
-    setTimeout (->
-      jobstore.getJob job.id, (j) ->
-        assert.equal j.state, 'success'
-        done()
-    ), 10
+    jobstore.transaction (t) ->
+      job.state = 'success'
+      t.updateJob job, ->
+        t.commit ->
+          setTimeout (->
+            jobstore.getJob job.id, (j) ->
+              assert.equal j.state, 'success'
+              done()
+          ), 10

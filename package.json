@@ -24,6 +24,7 @@
     "rimraf": "~2.2.8",
     "temp": "~0.8.0",
     "async": "~0.9.0",
-    "sqlite3": "~2.2.4"
+    "sqlite3": "~2.2.4",
+    "sqlite3-transactions": "0.0.5"
   }
 }

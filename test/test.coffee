@@ -202,17 +202,23 @@ describe 'Job', ->
   it 'Avoids recomputing calculated jobs'
 
 describe 'SeriesResource', ->
-    e = null
-    beforeEach ->
-      e = new jobserver.SeriesResource(new jobserver.Resource())
+  server = null
+  before (done) ->
+    server = new jobserver.Server()
+    server.defaultResource = new jobserver.Resource()
+    server.init done
 
-    it 'Runs jobs in order', (done) ->
-      jobs = (new OrderingJob() for i in [0...3])
-      j.enqueue(e) for j in jobs
-      jobs[jobs.length-1].on 'settled', ->
-        for i in [1...3]
-          jobs[i].assertRanAfter(jobs[i-1])
-        done()
+  e = null
+  beforeEach ->
+    e = new jobserver.SeriesResource(new jobserver.Resource())
+
+  it 'Runs jobs in order', (done) ->
+    jobs = (new OrderingJob(e) for i in [0...3])
+    server.submit(j) for j in jobs
+    jobs[jobs.length-1].on 'settled', ->
+      for i in [1...3]
+        jobs[i].assertRanAfter(jobs[i-1])
+      done()
 
 describe 'LocalResource', ->
     server = null
@@ -220,7 +226,7 @@ describe 'LocalResource', ->
     blobstore = null
     beforeEach (done) ->
       server = new jobserver.Server()
-      e = new jobserver.LocalResource()
+      e = server.defaultResource = new jobserver.LocalResource()
       server.init done
 
     it 'Runs subtasks with a queue', (cb) ->
@@ -236,24 +242,21 @@ describe 'LocalResource', ->
         ctx.then (n) ->
           order.push 'c'
           n()
-      j.enqueue(e)
-      j.on 'settled', ->
+      server.submit j, ->
         assert.deepEqual order, ['a', 'b', 'c']
         cb()
 
     it 'Runs commands', (cb) ->
       j = new TestJob (ctx) ->
         ctx.run('touch test.txt')
-      j.enqueue(e)
-      j.on 'settled', ->
+      server.submit j, ->
         assert.equal(j.state, 'success')
         cb()
 
     it 'Fails if commands fail', (cb) ->
       j = new TestJob (ctx) ->
         ctx.run('false')
-      j.enqueue(e)
-      j.on 'settled', ->
+      server.submit j, ->
         assert.equal(j.state, 'fail')
         cb()
 
@@ -261,7 +264,6 @@ describe 'LocalResource', ->
       j = new TestJob (ctx) ->
         ctx.run('echo hello > test.txt')
         ctx.get('test', 'test.txt')
-      j.resource = e
       server.submit j, ->
         assert.equal(j.state, 'success')
         j.results.test.getBuffer (data) ->
