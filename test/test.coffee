@@ -9,13 +9,12 @@ class TestJob extends jobserver.Job
 
 class OrderingJob extends jobserver.Job
   counter = 1
-  run: (ctx) ->
+  run: (ctx, cb) ->
     this.startTick = counter++
-    ctx.then (c) =>
-      setTimeout (=>
-        this.endTick = counter++
-        c()
-      ), 1
+    setTimeout (=>
+      this.endTick = counter++
+      cb()
+    ), 1
 
   assertRanAfter: (job) ->
     assert job.startTick and job.endTick, "other job did not run"
@@ -39,6 +38,7 @@ describe 'Job', ->
         order.push('exec')
         ctx.write("test1\n")
         ctx.write("test2\n")
+        null
 
       job.on 'state', (s) ->
         order.push(s)
@@ -107,28 +107,28 @@ describe 'Job', ->
 
       it 'in callbacks', (done) ->
         job = new TestJob (ctx) ->
-          ctx.then (cb) ->
+          (cb, ctx) ->
             setImmediate -> throw new Error("Test error")
         server.submit job, ->
           assert.equal job.state, 'fail'
           done()
 
   it 'persists inputs and results', (done) ->
-    j1 = new TestJob (ctx) ->
-      @ctx.then (cb) =>
+    j1 = new TestJob [
+      (ctx, cb) ->
         @results['outStr'] = 'test'
         cb()
-      @ctx.then (cb) =>
+      (ctx, cb) ->
         data = new Buffer('Hello World')
         @results['outBlob'] = @server.blobStore.putBlob(data, {}, cb)
+    ]
     j1.inputs.inStr = 'foo'
     j1.results.outStr = new jobserver.FutureResult(j1, 'outStr')
     j1.results.outBlob = new jobserver.FutureResult(j1, 'outBlob')
 
     j2 = new TestJob (ctx) ->
-      @ctx.then (cb) =>
-        @results.outBlob2 = @inputs.inBlob
-        cb()
+      @results.outBlob2 = @inputs.inBlob
+      null
     j2.inputs.inBlob = j1.results.outBlob
 
     server.submit j2, ->
@@ -155,11 +155,11 @@ describe 'Job', ->
           done()
 
   it 'aborts if dependencies fail', (done) ->
-    j1 = new TestJob (ctx) ->
-      ctx.then (cb) -> cb("testErr")
+    j1 = new TestJob (ctx, cb) ->
+      cb("testErr")
     j1.results.test = new jobserver.FutureResult(j1, 'test')
-    j3 = new TestJob (ctx) ->
-      ctx.then (cb) -> setTimeout(cb, 1)
+    j3 = new TestJob (ctx, cb) ->
+      setTimeout(cb, 1)
     j2 = new TestJob (ctx) ->
     j2.inputs.test = j1.results.test
     j2.explicitDependencies.push(j1)
@@ -171,15 +171,12 @@ describe 'Job', ->
 
   it 'Can run a job as a step of another', (done) ->
     order = []
-    j1 = new TestJob (ctx) ->
-      ctx.then (cb) ->
-        order.push 'before'
-        cb()
+    j1 = new TestJob (ctx) -> [
+      -> order.push 'before'; null
       ctx.runJob new TestJob (ctx) ->
-        order.push 'sub'
-      ctx.then (cb) ->
-        order.push 'after'
-        cb()
+        order.push 'sub'; null
+      -> order.push 'after'; null
+    ]
     server.submit j1, ->
       assert.equal j1.state, 'success'
       assert.deepEqual order, ['before', 'sub', 'after']
@@ -229,21 +226,28 @@ describe 'LocalResource', ->
       e = server.defaultResource = new jobserver.LocalResource()
       server.init done
 
-    it 'Runs subtasks with a queue', (cb) ->
+    it 'Runs subtasks in sequence', (cb) ->
       order = []
-      j = new TestJob (ctx) ->
-        assert(ctx.dir)
-        ctx.then (n) ->
+      j = new TestJob (ctx) -> [
+        ->
           order.push 'a'
-          n()
-        ctx.then (n) ->
-          order.push 'b'
-          setTimeout(n, 10)
-        ctx.then (n) ->
-          order.push 'c'
-          n()
+          null
+        (c) ->
+          assert.equal(ctx, c)
+          order.push('b')
+          null
+        (c, next) ->
+          assert.equal(ctx, c)
+          order.push('c')
+          setTimeout(next, 1)
+        -> [
+          ->
+            order.push 'd'
+            null
+        ]
+      ]
       server.submit j, ->
-        assert.deepEqual order, ['a', 'b', 'c']
+        assert.deepEqual order, ['a', 'b', 'c', 'd']
         cb()
 
     it 'Runs commands', (cb) ->
@@ -261,9 +265,10 @@ describe 'LocalResource', ->
         cb()
 
     it 'Saves files', (cb) ->
-      j = new TestJob (ctx) ->
+      j = new TestJob (ctx) -> [
         ctx.run('echo hello > test.txt')
         ctx.get('test', 'test.txt')
+      ]
       server.submit j, ->
         assert.equal(j.state, 'success')
         j.results.test.getBuffer (data) ->
@@ -272,10 +277,11 @@ describe 'LocalResource', ->
 
     it 'Loads files', (cb) ->
       b = server.blobStore.putBlob(new Buffer("Hello\n"))
-      j = new TestJob (ctx) ->
+      j = new TestJob (ctx) -> [
         ctx.put(@inputs.test, 'test.txt')
         ctx.run 'echo Hello > test2.txt'
         ctx.run 'diff -u test.txt test2.txt'
+      ]
       j.resource = e
       j.inputs.test = b
       server.submit j, ->

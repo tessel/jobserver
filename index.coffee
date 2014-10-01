@@ -367,10 +367,18 @@ Context: class Context extends TeeStream
     # If not stdout, then a null sink, or some other way of fixing this.
     @pipe(process.stdout)
 
-  _doSeries: (next) ->
-    async.series @queue, (err) =>
-      @_done(err)
-      next(!err)
+  do: (o, cb) =>
+    if not o
+      cb(null)
+    else if Array.isArray(o)
+      async.eachSeries o, @do, cb
+    else if typeof o == 'function'
+      if o.length < 2
+        @do o.call(@job, this), cb
+      else
+        o.call(@job, this, cb)
+    else
+      cb(new Error("Invalid value used as action: " + o))
 
   _done: (err) =>
     if err
@@ -387,12 +395,9 @@ Context: class Context extends TeeStream
     @end()
     @job.log = @log
 
-  then: (fn) ->
-    @queue.push(fn)
-
   runJob: (child) ->
-    parent = @job
-    @then (cb) ->
+    (ctx, cb) ->
+      parent = ctx.job
       parent.server.transaction (t) ->
         t.submit child, ->
           t.addDependency parent, child, t.commit
@@ -426,8 +431,9 @@ Context: class Context extends TeeStream
             next(false)
 
           job.ctx.domain.run ->
-            job.run(job.ctx)
-            job.ctx._doSeries(next)
+            job.ctx.do job.run, (err) ->
+              job.ctx._done(err)
+              next(!err)
 
 # A resource combinator that runs jobs one at a time in series on a specified resource
 @SeriesResource = class SeriesResource extends Resource
@@ -469,17 +475,16 @@ Context: class Context extends TeeStream
       null
 
     env: (e) ->
-      @then (cb) =>
-        @envImmediate(e)
-        cb()
+      (ctx) ->
+        ctx.envImmediate(e)
 
     cd: (p) ->
-      @then (cb) =>
-        @_cwd = path.resolve(@_cwd, p)
-        cb()
+      (ctx) ->
+        ctx._cwd = path.resolve(ctx._cwd, p)
+        null
 
     run: (command, args) ->
-      @then (cb) =>
+      (ctx, cb) =>
         unless util.isArray(args)
           args = ['-c', command]
           command = 'sh'
@@ -492,13 +497,13 @@ Context: class Context extends TeeStream
           cb(if code != 0 then "Exited with #{code}")
 
     put: (content, filename) ->
-      @then (cb) =>
+      (ctx, cb) =>
         content.getBuffer (data) =>
           @write("#{data.length} bytes to #{path.resolve(@_cwd, filename)}\n")
           fs.writeFile path.resolve(@_cwd, filename), data, cb
 
     get: (output, filename) ->
-      @then (cb) =>
+      (ctx, cb) =>
         fs.readFile path.resolve(@_cwd, filename), (err, data) =>
           return cb(err) if err
           @job.results[output] = @job.server.blobStore.putBlob(data, {from: 'file', jobId: @job.id, name: output}, cb)
