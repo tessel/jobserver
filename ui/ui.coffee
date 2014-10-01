@@ -75,18 +75,15 @@ class JobSidebar extends Backbone.View
     @$('#log').empty()
     @logs = app.selectedJob.logs()
     @logs.addEventListener 'open', =>
-      console.log('open log')
       @logparse = new logparse(@$('#log')[0])
     @logs.addEventListener 'message', (e) =>
       @logparse.push(JSON.parse(e.data))
     @logs.addEventListener 'error', (e) ->
-      console.log('error', e)
+      console.error('Log error', e)
     @logs.addEventListener 'end', (e) =>
-      console.log("stream end")
       @logs.close()
 
   showList = (elem, dict) ->
-    console.log(dict)
     elem.empty().hide()
     for k, v of dict when v
       elem.show()
@@ -120,6 +117,7 @@ connect = (path, id) ->
 
   listen = (type, cb) ->
     app.eventsource.addEventListener type, (e) ->
+      console.log("msg:", e.data)
       cb(JSON.parse(e.data))
 
   listen 'hello', (m) ->
