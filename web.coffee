@@ -46,12 +46,16 @@ module.exports = web = (server, app) ->
     for res in connections when res.jobs is null or res.jobs.indexOf(job.id) != -1
       res.sse('job', msg)
 
+  listenToJobAndDependencies = (res, job) ->
+    if res.jobs.indexOf(job.id) == -1
+      res.jobs.push(job.id)
+      res.sse(job.toJSON())
+      for dep in job.dependencies
+        listenToJobAndDependencies(res, dep)
+
   server.on 'job.dependencyAdded', (job, dep) ->
-    msg = dep.toJSON()
     for res in connections when res.jobs? and res.jobs.indexOf(job.id) != -1
-      if res.jobs.indexOf(dep.id) == -1
-        res.jobs.push(dep.id)
-        res.sse(msg)
+      listenToJobAndDependencies(res, dep)
 
   server.on 'submitted', (job) ->
     msg = job.toJSON()
