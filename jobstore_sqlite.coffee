@@ -1,4 +1,5 @@
 {JobInfo, JobStore, Blob, FutureResult} = require './index'
+{GitRef} = require './github'
 sqlite3 = require 'sqlite3'
 {TransactionDatabase} = require 'sqlite3-transactions'
 async = require 'async'
@@ -97,6 +98,8 @@ class JobStoreTransaction
       v = v.get()
     if v instanceof Blob
       ['blob', v.id]
+    else if v instanceof GitRef
+      ['git', v.serialize()]
     else
       ['json', JSON.stringify(v)]
 
@@ -104,6 +107,7 @@ class JobStoreTransaction
     switch type
       when 'json' then JSON.parse(value)
       when 'blob' then new Blob(@blobStore, value)
+      when 'git' then GitRef.deserialize(value)
 
   commit: (cb) ->
     @db.commit(cb)

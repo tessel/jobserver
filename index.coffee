@@ -508,5 +508,7 @@ Context: class Context extends TeeStream
           return cb(err) if err
           @job.results[output] = @job.server.blobStore.putBlob(data, {from: 'file', jobId: @job.id, name: output}, cb)
 
-    git_clone: (repo, branch, dir) ->
-      @run('git', ['clone', '--depth=1', '-b', branch, '--', repo, dir])
+    git_clone: (ref, dir) -> [
+      @run('git', ['clone', '--', ref.repo, dir])
+      @run('git', ['-C', dir, 'checkout', '-q', ref.ref])
+    ]
