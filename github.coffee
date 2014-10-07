@@ -19,12 +19,10 @@ jobserver = require './index'
 
   gitUrl: -> "https://github.com/#{@user}/#{@repo}.git"
   branchRef: (branch, cb) ->
-    console.log 'branchref', branch
     if branch instanceof GitRef
       return cb(branch)
 
     @github.gitdata.getReference {@user, @repo, ref: "heads/#{branch}"}, (err, res) =>
-      console.log(new GitRef(@gitUrl(), branch, res.object.sha))
       return cb(err) if err
       cb(new GitRef(@gitUrl(), branch, res.object.sha))
 
@@ -61,7 +59,7 @@ jobserver = require './index'
             return cb(err) if err
             console.log(res)
             new_commit = res.sha
-            @githubForceReference @user, @repo, branch, new_commit, (err) =>
+            @forceReference branch, new_commit, (err) =>
               cb(err, new_commit)
 
   merge: (branch, reference, commit_message, cb) ->
