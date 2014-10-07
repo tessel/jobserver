@@ -22,6 +22,9 @@ jobserver = require './index'
     if branch instanceof GitRef
       return cb(branch)
 
+    if /[0-9a-f]{40}/.test(branch)
+      return cb(new GitRef(@gitUrl(), null, branch))
+
     @github.gitdata.getReference {@user, @repo, ref: "heads/#{branch}"}, (err, res) =>
       return cb(err) if err
       cb(new GitRef(@gitUrl(), branch, res.object.sha))
