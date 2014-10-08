@@ -1,18 +1,14 @@
 jobserver = require './index'
 
 @GitRef = class GitRef
-  constructor: (@repo, @branch, @ref) ->
+  constructor: (@repo, @ref) ->
   serialize: -> JSON.stringify(this)
   @deserialize: (v) ->
-    {repo, branch, ref} = JSON.parse(v)
-    new GitRef(repo, branch, ref)
+    {repo, ref} = JSON.parse(v)
+    new GitRef(repo, ref)
 
   refStr: ->
-    ref = @ref.slice(0, 8)
-    if @branch
-      "#{@branch}@#{ref}"
-    else
-      ref
+    @ref.slice(0, 8)
 
 @GithubRepository = class GithubRepository
   constructor: (@github, @user, @repo) ->
@@ -23,11 +19,11 @@ jobserver = require './index'
       return cb(branch)
 
     if /[0-9a-f]{40}/.test(branch)
-      return cb(new GitRef(@gitUrl(), null, branch))
+      return cb(new GitRef(@gitUrl(), branch))
 
     @github.gitdata.getReference {@user, @repo, ref: "heads/#{branch}"}, (err, res) =>
       return cb(err) if err
-      cb(new GitRef(@gitUrl(), branch, res.object.sha))
+      cb(new GitRef(@gitUrl(), res.object.sha))
 
   forceReference: (branch, sha, cb) ->
     @github.gitdata.updateReference {@user, @repo, ref:"heads/#{branch}", sha, force:true}, (err, res) =>
