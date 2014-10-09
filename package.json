@@ -19,7 +19,7 @@
   },
   "dependencies": {
     "send": "~0.2.0",
-    "server-event": "~1.0.1",
+    "server-event": "git+https://github.com/kevinmehall/server-event.git#fc0d590179250e16acd285933c9d38f2aab1415a",
     "express": "~4.4.5",
     "rimraf": "~2.2.8",
     "temp": "~0.8.0",
