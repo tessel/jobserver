@@ -44,7 +44,9 @@ table {
 body {
   font-family: sans-serif;
   background: #f8f8f8;
+  display: -webkit-flex;
   display: flex;
+  -webkit-flex-direction: row;
   flex-direction: row;
   align-items: stretch;
   height: 100vh;
@@ -59,16 +61,23 @@ body>header {
   height: 24px;
   background: #444;
   color: white;
+  display: -webkit-flex;
   display: flex;
+  -webkit-flex-direction: row;
   flex-direction: row;
+  -webkit-justify-content: flex-start;
   justify-content: flex-start;
+  -webkit-align-items: stretch;
   align-items: stretch;
 }
 
 body>header>a {
   padding: 0 0.5em;
+  display: -webkit-flex;
   display: flex;
+  -webkit-justify-content: center;
   justify-content: center;
+  -webkit-align-items: center;
   align-items: center;
 }
 
@@ -79,9 +88,13 @@ body>header>a {
 }
 
 .job-list {
+  display: -webkit-flex;
   display: flex;
+  -webkit-flex-direction: column;
   flex-direction: column;
+  -webkit-justify-content: flex-start;
   justify-content: flex-start;
+  -webkit-align-items: stretch;
   align-items: stretch;
   -webkit-user-select: none;
   -moz-user-select: none;
@@ -97,6 +110,7 @@ body>header>a {
 }
 
 .job {
+  -webkit-flex: 0 0 auto;
   flex: 0 0 auto;
 }
 
@@ -142,10 +156,15 @@ body>header>a {
 }
 
 #info {
+  -webkit-flex: 1;
   flex: 1;
+  display: -webkit-flex;
   display: flex;
+  -webkit-flex-direction: column;
   flex-direction: column;
+  -webkit-justify-content: flex-start;
   justify-content: flex-start;
+  -webkit-align-items: stretch;
   align-items: stretch;
   background: #333;
   color: white;
@@ -156,6 +175,7 @@ body>header>a {
 }
 
 #title {
+  -webkit-flex: 0 0 auto;
   flex: 0 0 auto;
   padding: 16px;
   font-family: monospace;
@@ -163,6 +183,7 @@ body>header>a {
 }
 
 #scroll {
+  -webkit-flex: 1 1 auto;
   flex: 1 1 auto;
   padding: 0 16px;
   overflow-y: auto;
